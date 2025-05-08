@@ -2,67 +2,42 @@
 
 namespace App\Http\Controllers\API\v1;
 
+use App\Dto\Coordinate;
+use App\Dto\Internal\CheckInRequestDto;
+use App\Dto\Internal\CheckinSuccessDto;
 use App\Dto\Transport\Station as StationDto;
 use App\Enum\Business;
 use App\Enum\StatusVisibility;
 use App\Enum\TravelType;
 use App\Exceptions\Checkin\AlreadyCheckedInException;
 use App\Exceptions\CheckInCollisionException;
+use App\Exceptions\CheckinException;
 use App\Exceptions\HafasException;
-use App\Exceptions\NotConnectedException;
 use App\Exceptions\StationNotOnTripException;
-use App\Http\Controllers\Backend\Transport\HomeController;
+use App\Http\Controllers\Backend\Transport\StationController;
 use App\Http\Controllers\Backend\Transport\TrainCheckinController;
-use App\Http\Controllers\HafasController;
-use App\Http\Controllers\TransportController as TransportBackend;
+use App\Http\Resources\CheckinSuccessResource;
 use App\Http\Resources\StationResource;
-use App\Http\Resources\StatusResource;
 use App\Http\Resources\TripResource;
-use App\Models\Event;
+use App\Hydrators\CheckinRequestHydrator;
 use App\Models\Station;
+use App\Models\Status;
+use App\Models\User;
+use App\Notifications\YouHaveBeenCheckedIn;
+use App\Services\GeoService;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rules\Enum;
+use Throwable;
 
 class TransportController extends Controller
 {
-    /**
-     * @see All slashes (as well as encoded to %2F) in $name need to be replaced, preferrably by a space (%20)
-     */
-    public function getLegacyDepartures(Request $request, string $name): JsonResponse { //TODO: remove endpoint after 2024-06
-        $validated = $request->validate([
-                                            'when'       => ['nullable', 'date'],
-                                            'travelType' => ['nullable', new Enum(TravelType::class)],
-                                        ]);
-
-        try {
-            $trainStationboardResponse = TransportBackend::getDepartures(
-                stationQuery: $name,
-                when:         isset($validated['when']) ? Carbon::parse($validated['when']) : null,
-                travelType:   TravelType::tryFrom($validated['travelType'] ?? null),
-                localtime:    isset($validated['when']) && !preg_match('(\+|Z)', $validated['when'])
-            );
-        } catch (HafasException) {
-            return $this->sendError(__('messages.exception.generalHafas', [], 'en'), 502);
-        } catch (ModelNotFoundException) {
-            return $this->sendError(__('controller.transport.no-station-found', [], 'en'));
-        } catch (Exception $exception) {
-            report($exception);
-            return $this->sendError('An unknown error occurred.', 500);
-        }
-        return $this->sendResponse(
-            data:       $trainStationboardResponse['departures'],
-            additional: ["meta" => ['station' => StationDto::fromModel($trainStationboardResponse['station']),
-                                    'times'   => $trainStationboardResponse['times'],
-                        ]]
-        );
-    }
-
     /**
      * @param Request $request
      * @param int     $stationId
@@ -98,7 +73,7 @@ class TransportController extends Controller
      *          description="Means of transport (default: all)",
      *          required=false,
      *          @OA\Schema(
-     *              ref="#/components/schemas/TravelTypeEnum"
+     *              ref="#/components/schemas/TravelType"
      *          )
      *      ),
      *      @OA\Response(
@@ -183,12 +158,14 @@ class TransportController extends Controller
         $station   = Station::findOrFail($stationId);
 
         try {
-            $departures = HafasController::getDepartures(
+            $departures = $this->dataProvider->getDepartures(
                 station:   $station,
                 when:      $timestamp,
                 type:      TravelType::tryFrom($validated['travelType'] ?? null),
                 localtime: isset($validated['when']) && !preg_match('(\+|Z)', $validated['when'])
-            )->sortBy(function($departure) {
+            );
+
+            $departures = $departures->sortBy(function($departure) {
                 return $departure->when ?? $departure->plannedWhen;
             });
 
@@ -211,7 +188,7 @@ class TransportController extends Controller
             return $this->sendError(__('controller.transport.no-station-found', [], 'en'));
         } catch (Exception $exception) {
             report($exception);
-            return $this->sendError('An unknown error occurred.', 500);
+            return $this->sendError('An unknown error occurred.', 500, null, $exception);
         }
     }
 
@@ -245,22 +222,7 @@ class TransportController extends Controller
      *     @OA\Response(
      *          response=200,
      *          description="successful operation",
-     *          @OA\JsonContent(
-     *              @OA\Property(property="data", type="object",
-     *                  @OA\Property(property="id", type="int64", example=1),
-     *                  @OA\Property(property="category", ref="#/components/schemas/TrainCategoryEnum"),
-     *                  @OA\Property(property="number", type="string", example="4-a6s4-4"),
-     *                  @OA\Property(property="lineName", type="string", example="S 4"),
-     *                  @OA\Property(property="journeyNumber", type="int64", example="34427"),
-     *                  @OA\Property(property="origin", ref="#/components/schemas/Station"),
-     *                  @OA\Property(property="destination", ref="#/components/schemas/Station"),
-     *                  @OA\Property(property="stopovers", type="array",
-     *                      @OA\Items(
-     *                          ref="#/components/schemas/Stopover"
-     *                      )
-     *                  ),
-     *              )
-     *          )
+     *          @OA\JsonContent(ref="#/components/schemas/TripResource")
      *       ),
      *       @OA\Response(response=400, description="Bad request"),
      *       @OA\Response(response=401, description="Unauthorized"),
@@ -287,6 +249,9 @@ class TransportController extends Controller
             return $this->sendResponse(data: new TripResource($trip));
         } catch (StationNotOnTripException) {
             return $this->sendError(__('controller.transport.not-in-stopovers', [], 'en'), 400);
+        } catch (HafasException $exception) {
+            report($exception);
+            return $this->sendError(__('messages.exception.hafas.502', [], 'en'), 503);
         }
     }
 
@@ -339,13 +304,19 @@ class TransportController extends Controller
                                         ]);
 
         try {
-            $nearestStation = HafasController::getNearbyStations(
+            $nearestStation = $this->dataProvider->getNearbyStations(
                 latitude:  $validated['latitude'],
                 longitude: $validated['longitude'],
                 results:   1
             )->first();
         } catch (HafasException) {
-            return $this->sendError(__('messages.exception.generalHafas', [], 'en'), 503);
+            $bbox = (new GeoService())->getBoundingBox(new Coordinate($validated['latitude'], $validated['longitude']), 100, 6);
+
+            $nearestStation = Station::whereBetween('latitude', [$bbox->lowerRight->latitude, $bbox->upperLeft->latitude])
+                                     ->whereBetween('longitude', [$bbox->lowerRight->longitude, $bbox->upperLeft->longitude])
+                                     ->whereNotNull('ibnr')
+                                     ->orderBy('id', 'asc')
+                                     ->first();
         }
 
         if ($nearestStation === null) {
@@ -358,9 +329,9 @@ class TransportController extends Controller
     /**
      * @OA\Post(
      *      path="/trains/checkin",
-     *      operationId="createTrainCheckin",
+     *      operationId="createCheckin",
      *      tags={"Checkin"},
-     *      summary="Create a checkin",
+     *      summary="Check in to a trip.",
      *      @OA\RequestBody(
      *          required=true,
      *          @OA\JsonContent(ref="#/components/schemas/CheckinRequestBody")
@@ -368,23 +339,25 @@ class TransportController extends Controller
      *      @OA\Response(
      *          response=201,
      *          description="successful operation",
-     *          @OA\JsonContent(ref="#/components/schemas/CheckinResponse")
+     *          @OA\JsonContent(ref="#/components/schemas/CheckinSuccessResource")
      *       ),
      *       @OA\Response(response=400, description="Bad request"),
-     *       @OA\Response(response=409, description="Checkin collision"),
      *       @OA\Response(response=401, description="Unauthorized"),
+     *       @OA\Response(response=403, description="Forbidden", @OA\JsonContent(ref="#/components/schemas/CheckinForbiddenWithUsersResponse")),
+     *       @OA\Response(response=409, description="Checkin collision"),
      *       security={
      *           {"passport": {"create-statuses"}}, {"token": {}}
-     *
      *       }
      *     )
      *
      * @param Request $request
      *
      * @return JsonResponse
-     * @throws NotConnectedException
      */
     public function create(Request $request): JsonResponse {
+        $this->authorize('create', Status::class);
+
+        $withUsers = null;
         $validated = $request->validate([
                                             'body'        => ['nullable', 'max:280'],
                                             'business'    => ['nullable', new Enum(Business::class)],
@@ -399,83 +372,54 @@ class TransportController extends Controller
                                             'destination' => ['required', 'numeric'],
                                             'departure'   => ['required', 'date'],
                                             'arrival'     => ['required', 'date'],
-                                            'force'       => ['nullable', 'boolean']
+                                            'force'       => ['nullable', 'boolean'],
+                                            'with'        => ['nullable', 'array', 'max:10'],
                                         ]);
+        if (isset($validated['with'])) {
+            $withUsers      = User::whereIn('id', $validated['with'])->get();
+            $forbiddenUsers = collect();
+            foreach ($withUsers as $user) {
+                if (!Auth::user()?->can('checkin', $user)) {
+                    $forbiddenUsers->push($user);
+                }
+            }
+            if ($forbiddenUsers->isNotEmpty()) {
+                $forbiddenUserIds = $forbiddenUsers->pluck('id')->toArray();
+                return response()->json(
+                    data:   [
+                                'message' => 'You are not allowed to check in the following users: ' . implode(',', $forbiddenUserIds),
+                                'meta'    => [
+                                    'invalidUsers' => $forbiddenUserIds
+                                ]
+                            ],
+                    status: 403
+                );
+            }
+        }
 
         try {
-            $searchKey          = empty($validated['ibnr']) ? 'id' : 'ibnr';
-            $originStation      = Station::where($searchKey, $validated['start'])->first();
-            $destinationStation = Station::where($searchKey, $validated['destination'])->first();
+            $dto             = (new CheckinRequestHydrator($validated))->hydrateFromApi();
+            $checkinResponse = TrainCheckinController::checkin($dto);
 
-            $checkinResponse           = TrainCheckinController::checkin(
-                user:           Auth::user(),
-                trip:           HafasController::getHafasTrip($validated['tripId'], $validated['lineName']),
-                origin:         $originStation,
-                departure:      Carbon::parse($validated['departure']),
-                destination:    $destinationStation,
-                arrival:        Carbon::parse($validated['arrival']),
-                travelReason:   Business::tryFrom($validated['business'] ?? Business::PRIVATE->value),
-                visibility:     StatusVisibility::tryFrom($validated['visibility'] ?? StatusVisibility::PUBLIC->value),
-                body:           $validated['body'] ?? null,
-                event:          isset($validated['eventId']) ? Event::find($validated['eventId']) : null,
-                force:          isset($validated['force']) && $validated['force'],
-                postOnMastodon: isset($validated['toot']) && $validated['toot'],
-                shouldChain:    isset($validated['chainPost']) && $validated['chainPost']
-            );
-            $checkinResponse['status'] = new StatusResource($checkinResponse['status']);
+            // if isset, check in the other users with their default values
+            $this->checkinOtherUsers($withUsers, $dto, $checkinResponse);
 
-            //Rewrite ['points'] so the DTO will match the documented structure -> non-breaking api change
-            $pointsCalculation         = $checkinResponse['points'];
-            $checkinResponse['points'] = [
-                'points'      => $pointsCalculation->points,
-                'calculation' => [
-                    'base'     => $pointsCalculation->basePoints,
-                    'distance' => $pointsCalculation->distancePoints,
-                    'factor'   => $pointsCalculation->factor,
-                    'reason'   => $pointsCalculation->reason->value,
-                ],
-                'additional'  => null, //unused old attribute (not removed so this isn't breaking)
-            ];
-
-            return $this->sendResponse($checkinResponse, 201); //ToDo: Check if documented structure has changed
+            return $this->sendResponse(new CheckinSuccessResource($checkinResponse), 201);
         } catch (CheckInCollisionException $exception) {
             return $this->sendError([
-                                        'status_id' => $exception->getCollision()->status_id,
-                                        'lineName'  => $exception->getCollision()->trip->linename
+                                        'status_id' => $exception->checkin->status_id,
+                                        'lineName'  => $exception->checkin->trip->linename
                                     ], 409);
 
         } catch (StationNotOnTripException) {
             return $this->sendError('Given stations are not on the trip/have wrong departure/arrival.', 400);
-        } catch (HafasException $exception) {
+        } catch (HafasException|CheckinException $exception) {
             return $this->sendError($exception->getMessage(), 400);
         } catch (AlreadyCheckedInException) {
             return $this->sendError(__('messages.exception.already-checkedin', [], 'en'), 400);
-        }
-    }
-
-    /**
-     * @param string $stationName
-     *
-     * @return JsonResponse
-     * @see        All slashes (as well as encoded to %2F) in $name need to be replaced, preferrably by a space (%20)
-     * @deprecated Replaced by setHome (with "ID" instead of StationName and without "trains" in the path)
-     */
-    public function setHomeLegacy(string $stationName): JsonResponse { //ToDo: Remove this endpoint after 2024-06 (replaced by id)
-        try {
-            $station = HafasController::getStations(query: $stationName, results: 1)->first();
-            if ($station === null) {
-                return $this->sendError("Your query matches no station");
-            }
-
-            $station = HomeController::setHome(user: auth()->user(), station: $station);
-
-            return $this->sendResponse(
-                data: new StationResource($station),
-            );
-        } catch (HafasException) {
-            return $this->sendError("There has been an error with our data provider", 502);
-        } catch (ModelNotFoundException) {
-            return $this->sendError("Your query matches no station");
+        } catch (Exception $exception) {
+            report($exception);
+            return $this->sendError('An unknown error occurred.', 500, null, $exception);
         }
     }
 
@@ -565,10 +509,16 @@ class TransportController extends Controller
      */
     public function getTrainStationAutocomplete(string $query): JsonResponse {
         try {
-            $trainAutocompleteResponse = TransportBackend::getTrainStationAutocomplete($query);
-            return $this->sendResponse($trainAutocompleteResponse);
-        } catch (HafasException) {
-            return $this->sendError("There has been an error with our data provider", 503);
+            $trainAutocompleteResponse = (new StationController())->search($query);
+            return $this->sendResponse(StationResource::collection($trainAutocompleteResponse));
+        } catch (HafasException $e) {
+            // check if app is in debug mode
+            return $this->sendError(
+                "There has been an error with our data provider",
+                503,
+                null,
+                $e
+            );
         }
     }
 
@@ -599,6 +549,22 @@ class TransportController extends Controller
      *     )
      */
     public function getTrainStationHistory(): AnonymousResourceCollection {
-        return StationResource::collection(TransportBackend::getLatestArrivals(auth()->user()));
+        return StationResource::collection(StationController::getLatestArrivals(auth()->user()));
+    }
+
+    public function checkinOtherUsers(?Collection $withUsers, CheckInRequestDto $dto, CheckinSuccessDto $checkinResponse): void {
+        foreach ($withUsers ?? [] as $user) {
+            $dto->setUser($user);
+            $dto->setBody(null);
+            $dto->setStatusVisibility($user->default_status_visibility);
+            $dto->setPostOnMastodonFlag(false);
+            try {
+                $checkin = TrainCheckinController::checkin($dto);
+            } catch (Throwable) {
+                continue;
+            }
+            $user->notify(new YouHaveBeenCheckedIn($checkin->status, auth()->user()));
+            $checkinResponse->alsoOnThisConnection->push($checkin->status);
+        }
     }
 }

@@ -3,7 +3,7 @@
 
 @section('content')
     <div class="row justify-content-center">
-        <div class="col-md-8 col-lg-7">
+        <div class="col-md-7 col-lg-6">
             <div class="card mb-3">
                 <div class="card-header">{{ __('settings.title-privacy') }}</div>
 
@@ -15,10 +15,10 @@
                             <label for="name" class="col-md-4 col-form-label text-md-right">
                                 {{ __('settings.hide-search-engines') }}
                                 <i class="fas fa-info-circle" title="{{__('settings.search-engines.description')}}"
-                                   data-mdb-toggle="tooltip"></i>
+                                   data-bs-toggle="tooltip"></i>
                             </label>
                             <div class="col-md-6">
-                                <select class="form-control" name="prevent_index">
+                                <select class="form-select" name="prevent_index">
                                     <option value="0" @if(auth()->user()->prevent_index == 0) selected @endif>
                                         {{__('settings.allow')}}
                                     </option>
@@ -37,7 +37,7 @@
                                 {{ __('settings.visibility.default') }}
                             </label>
                             <div class="col-md-6">
-                                <select class="form-control" name="default_status_visibility">
+                                <select class="form-select" name="default_status_visibility">
                                     @foreach(\App\Enum\StatusVisibility::cases() as $visibility)
                                         <option value="{{$visibility->value}}"
                                                 @if(auth()->user()->default_status_visibility === $visibility) selected @endif>
@@ -56,7 +56,7 @@
                             <label for="name" class="col-md-4 col-form-label text-md-right">
                                 {{ __('settings.visibility.hide') }}
                                 <i class="fas fa-info-circle" title="{{__('settings.visibility.hide.explain')}}"
-                                   data-mdb-toggle="tooltip"></i>
+                                   data-bs-toggle="tooltip"></i>
                             </label>
                             <div class="col-md-6">
                                 <div class="input-group">
@@ -77,7 +77,7 @@
                                 {{ __('settings.mastodon.visibility') }}
                             </label>
                             <div class="col-md-6">
-                                <select class="form-control" name="mastodon_visibility">
+                                <select class="form-select" name="mastodon_visibility">
                                     @foreach(\App\Enum\MastodonVisibility::cases() as $visibility)
                                         <option value="{{$visibility->value}}"
                                                 @if(auth()->user()->socialProfile->mastodon_visibility === $visibility) selected @endif>
@@ -99,6 +99,16 @@
                                     <label class="custom-control-label" for="likes_enabled">
                                         {{ __('user.likes-enabled') }}
                                     </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <div class="col-md-6 offset-md-4">
+                                <div class="custom-control custom-checkbox custom-control-inline">
+                                    <input id="points_enabled" type="checkbox"
+                                           class="custom-control-input @error('points_enabled') is-invalid @enderror"
+                                           name="points_enabled" {{ auth()->user()->points_enabled ? 'checked' : '' }} />
+                                    {{ __('user.points-enabled') }}
                                 </div>
                             </div>
                         </div>
@@ -129,6 +139,14 @@
                     </form>
                 </div>
             </div>
+        </div>
+        <div class="col-md-5">
+            @if(auth()->user()?->hasRole('open-beta'))
+                <div id="settings-friend-checkin">
+                    <friend-checkin-settings>
+                    </friend-checkin-settings>
+                </div>
+            @endif
         </div>
     </div>
 @endsection

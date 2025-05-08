@@ -2,18 +2,14 @@
 
 namespace App\Http\Controllers\Frontend;
 
-use App\Enum\MapProvider;
 use App\Enum\MastodonVisibility;
 use App\Enum\StatusVisibility;
 use App\Exceptions\AlreadyFollowingException;
-use App\Exceptions\RateLimitExceededException;
 use App\Http\Controllers\Backend\User\FollowController;
 use App\Http\Controllers\Backend\User\FollowController as SettingsBackend;
 use App\Http\Controllers\Backend\User\SessionController;
 use App\Http\Controllers\Backend\User\TokenController;
-use App\Http\Controllers\Backend\WebhookController;
 use App\Http\Controllers\Controller;
-use DateTimeZone;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\RedirectResponse;
@@ -44,51 +40,10 @@ class SettingsController extends Controller
         return view('settings.mutes');
     }
 
-    public function updateMainSettings(Request $request): RedirectResponse {
-        $validated = $request->validate([
-                                            'username'     => [
-                                                'required', 'string', 'max:25', 'regex:/^[a-zA-Z0-9_]*$/'
-                                            ],
-                                            'name'         => ['required', 'string', 'max:50'],
-                                            'email'        => ['required', 'string', 'email:rfc,dns', 'max:255'],
-                                            'mapprovider'  => ['required', new Enum(MapProvider::class)],
-                                            'timezone'     => ['required', Rule::in(DateTimeZone::listIdentifiers())],
-                                            'experimental' => ['required', 'boolean'],
-                                        ]);
-
-        if (auth()->user()->username !== $validated['username']) {
-            $request->validate(['username' => ['unique:users']]);
-        }
-
-        if (auth()->user()->email !== $validated['email']) {
-            $request->validate(['email' => ['unique:users']]);
-            $validated['email_verified_at'] = null;
-            $validated['email']             = strtolower($validated['email']);
-        }
-
-        if ($validated['experimental'] === '1' && !auth()->user()->hasRole('open-beta')) {
-            auth()->user()->assignRole('open-beta');
-        } elseif ($validated['experimental'] === '0' && auth()->user()->hasRole('open-beta')) {
-            auth()->user()->removeRole('open-beta');
-        }
-
-        auth()->user()->update($validated);
-
-        if (!auth()->user()->hasVerifiedEmail()) {
-            try {
-                auth()->user()->sendEmailVerificationNotification();
-                session()->flash('info', __('email.verification.sent'));
-            } catch (RateLimitExceededException) {
-                session()->flash('error', __('email.verification.too-many-requests'));
-            }
-        }
-
-        return back();
-    }
-
     public function updatePrivacySettings(Request $request): RedirectResponse {
         $validated = $request->validate([
                                             'likes_enabled'             => ['nullable'],
+                                            'points_enabled'            => ['nullable'],
                                             'private_profile'           => ['nullable'],
                                             'prevent_index'             => ['required', 'gte:0', 'lte:1'],
                                             'privacy_hide_days'         => ['nullable', 'gte:1',],
@@ -107,6 +62,8 @@ class SettingsController extends Controller
         $user->update([
                           'likes_enabled'             => isset($validated['likes_enabled'])
                                                          && $validated['likes_enabled'] === 'on',
+                          'points_enabled'            => isset($validated['points_enabled'])
+                                                         && $validated['points_enabled'] === 'on',
                           'prevent_index'             => $validated['prevent_index'],
                           'private_profile'           => isset($validated['private_profile'])
                                                          && $validated['private_profile'] === 'on',
@@ -163,12 +120,6 @@ class SettingsController extends Controller
     public function renderToken(): Renderable {
         return view('settings.api-token', [
             'tokens' => TokenController::index(user: auth()->user()),
-        ]);
-    }
-
-    public function renderWebhooks(): Renderable {
-        return view('settings.webhooks', [
-            'webhooks' => WebhookController::index(user: auth()->user()),
         ]);
     }
 

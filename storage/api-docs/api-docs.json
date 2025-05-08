@@ -23,6 +23,35 @@
         }
     ],
     "paths": {
+        "/alerts": {
+            "get": {
+                "tags": [
+                    "Notifications"
+                ],
+                "summary": "Get all active alerts",
+                "operationId": "getActiveAlerts",
+                "responses": {
+                    "200": {
+                        "description": "List of active alerts",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/AlertResource"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/auth/logout": {
             "post": {
                 "tags": [
@@ -324,7 +353,7 @@
                 ],
                 "summary": "[Auth optional] Show active or upcoming events for the given timestamp",
                 "description": "Returns all active or upcoming events for the given timestamp. Default timestamp is now. If upcoming is set to true, all events ending after the timestamp are returned.",
-                "operationId": "9c949d287fe278f2f8de845eedbd12fa",
+                "operationId": "getEvents",
                 "parameters": [
                     {
                         "name": "timestamp",
@@ -420,21 +449,6 @@
                 ]
             }
         },
-        "/activeEvents": {
-            "get": {
-                "tags": [
-                    "Events"
-                ],
-                "summary": "DEPRECATED - USE /events - removed after 2024-08",
-                "description": "DEPRECATED - USE /events - removed after 2024-08",
-                "operationId": "35401311136edc062ced8b22c9cd8722",
-                "responses": {
-                    "200": {
-                        "description": "The events"
-                    }
-                }
-            }
-        },
         "/user/{id}/follow": {
             "post": {
                 "tags": [
@@ -461,7 +475,7 @@
                                 "schema": {
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/User"
+                                            "$ref": "#/components/schemas/UserResource"
                                         }
                                     },
                                     "type": "object"
@@ -515,7 +529,7 @@
                                 "schema": {
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/User"
+                                            "$ref": "#/components/schemas/UserResource"
                                         }
                                     },
                                     "type": "object"
@@ -545,7 +559,7 @@
                 ]
             }
         },
-        "/settings/followers": {
+        "/user/self/followers": {
             "get": {
                 "tags": [
                     "User/Follow",
@@ -563,7 +577,7 @@
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/components/schemas/User"
+                                                "$ref": "#/components/schemas/UserResource"
                                             }
                                         },
                                         "links": {
@@ -597,7 +611,7 @@
                 ]
             }
         },
-        "/settings/follow-requests": {
+        "/user/self/follow-requests": {
             "get": {
                 "tags": [
                     "User/Follow",
@@ -615,7 +629,7 @@
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/components/schemas/User"
+                                                "$ref": "#/components/schemas/UserResource"
                                             }
                                         },
                                         "links": {
@@ -643,7 +657,7 @@
                 ]
             }
         },
-        "/settings/followings": {
+        "/user/self/followings": {
             "get": {
                 "tags": [
                     "User/Follow",
@@ -661,7 +675,7 @@
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/components/schemas/User"
+                                                "$ref": "#/components/schemas/UserResource"
                                             }
                                         },
                                         "links": {
@@ -689,31 +703,24 @@
                 ]
             }
         },
-        "/user/removeFollower": {
+        "/user/self/followers/{userId}": {
             "delete": {
                 "tags": [
                     "User/Follow"
                 ],
                 "summary": "Remove a follower",
                 "operationId": "removeFollower",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "userId": {
-                                        "title": "userId",
-                                        "description": "ID of the to-be-unfollowed user",
-                                        "format": "int64",
-                                        "example": 1
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
+                "parameters": [
+                    {
+                        "name": "userId",
+                        "in": "path",
+                        "description": "User-ID",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1337
                     }
-                },
+                ],
                 "responses": {
                     "200": {
                         "description": "successful operation"
@@ -743,31 +750,24 @@
                 ]
             }
         },
-        "/user/acceptFollowRequest": {
+        "/user/self/follow-requests/{userId}": {
             "put": {
                 "tags": [
                     "User/Follow"
                 ],
                 "summary": "Accept a follow request",
                 "operationId": "acceptFollowRequest",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "userId": {
-                                        "title": "userId",
-                                        "description": "ID of the user who sent the follow request",
-                                        "format": "int64",
-                                        "example": 1
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
+                "parameters": [
+                    {
+                        "name": "userId",
+                        "in": "path",
+                        "description": "User-ID",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1337
                     }
-                },
+                ],
                 "responses": {
                     "200": {
                         "description": "successful operation"
@@ -775,11 +775,11 @@
                     "400": {
                         "description": "Bad request"
                     },
+                    "403": {
+                        "description": "Permission denied"
+                    },
                     "404": {
                         "description": "Request not found"
-                    },
-                    "500": {
-                        "description": "Unknown error"
                     }
                 },
                 "security": [
@@ -792,33 +792,24 @@
                         "token": []
                     }
                 ]
-            }
-        },
-        "/user/rejectFollowRequest": {
+            },
             "delete": {
                 "tags": [
                     "User/Follow"
                 ],
                 "summary": "Reject a follow request",
                 "operationId": "rejectFollowRequest",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "userId": {
-                                        "title": "userId",
-                                        "description": "ID of the user who sent the follow request",
-                                        "format": "int64",
-                                        "example": 1
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
+                "parameters": [
+                    {
+                        "name": "userId",
+                        "in": "path",
+                        "description": "User-ID",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "example": 1337
                     }
-                },
+                ],
                 "responses": {
                     "200": {
                         "description": "successful operation"
@@ -874,7 +865,7 @@
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/components/schemas/User"
+                                                "$ref": "#/components/schemas/UserResource"
                                             }
                                         }
                                     },
@@ -951,6 +942,9 @@
                     },
                     "409": {
                         "description": "Status already liked by user"
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded"
                     }
                 },
                 "security": [
@@ -1330,7 +1324,7 @@
                 ],
                 "summary": "Accept the current privacy policy",
                 "description": "Accept the current privacy policy",
-                "operationId": "4baaf2c20fed6c12e13df7493ffa62ad",
+                "operationId": "acceptPrivacyPolicy",
                 "responses": {
                     "204": {
                         "description": "Success"
@@ -1355,24 +1349,22 @@
         "/report": {
             "post": {
                 "tags": [
-                    "User",
-                    "Status",
-                    "Events"
+                    "Report"
                 ],
                 "summary": "Report a Status, Event or User to the admins.",
-                "operationId": "7a2c60a00b43cf41d9b72b6f15ad09ad",
+                "operationId": "report",
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "required": [
-                                    "subject_type",
-                                    "subject_id",
+                                    "subjectType",
+                                    "subjectId",
                                     "reason"
                                 ],
                                 "properties": {
-                                    "subject_type": {
+                                    "subjectType": {
                                         "type": "string",
                                         "enum": [
                                             "Event",
@@ -1381,7 +1373,7 @@
                                         ],
                                         "example": "Status"
                                     },
-                                    "subject_id": {
+                                    "subjectId": {
                                         "type": "integer",
                                         "example": 1
                                     },
@@ -1435,7 +1427,7 @@
                 ],
                 "summary": "Get the current user's profile settings",
                 "description": "Get the current user's profile settings",
-                "operationId": "47327232762d35b0766eee97b7cd62e9",
+                "operationId": "getProfileSettings",
                 "responses": {
                     "200": {
                         "description": "Success",
@@ -1444,7 +1436,7 @@
                                 "schema": {
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/UserProfileSettings"
+                                            "$ref": "#/components/schemas/UserProfileSettingsResource"
                                         }
                                     },
                                     "type": "object"
@@ -1473,52 +1465,13 @@
                 ],
                 "summary": "Update the current user's profile settings",
                 "description": "Update the current user's profile settings",
-                "operationId": "1d28c273d1e6e8c15b8655008d0de07f",
+                "operationId": "updateProfileSettings",
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
-                                "properties": {
-                                    "username": {
-                                        "type": "string",
-                                        "maxLength": 25,
-                                        "example": "gertrud123"
-                                    },
-                                    "displayName": {
-                                        "type": "string",
-                                        "maxLength": 50,
-                                        "example": "Gertrud"
-                                    },
-                                    "privateProfile": {
-                                        "type": "boolean",
-                                        "example": false,
-                                        "nullable": true
-                                    },
-                                    "preventIndex": {
-                                        "type": "boolean",
-                                        "example": false,
-                                        "nullable": true
-                                    },
-                                    "privacyHideDays": {
-                                        "type": "integer",
-                                        "example": 1,
-                                        "nullable": true
-                                    },
-                                    "defaultStatusVisibility": {
-                                        "type": "integer",
-                                        "nullable": true
-                                    },
-                                    "mastodonVisibility": {
-                                        "type": "integer",
-                                        "nullable": true
-                                    },
-                                    "mapProvider": {
-                                        "type": "string",
-                                        "nullable": true
-                                    }
-                                },
-                                "type": "object"
+                                "$ref": "#/components/schemas/UpdateProfileInformationRequest"
                             }
                         }
                     }
@@ -1531,7 +1484,7 @@
                                 "schema": {
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/UserProfileSettings"
+                                            "$ref": "#/components/schemas/UserProfileSettingsResource"
                                         }
                                     },
                                     "type": "object"
@@ -1553,6 +1506,111 @@
                     {
                         "passport": [
                             "write-settings"
+                        ]
+                    },
+                    {
+                        "token": []
+                    }
+                ]
+            }
+        },
+        "/stations": {
+            "get": {
+                "tags": [
+                    "Checkin"
+                ],
+                "summary": "Search for stations",
+                "description": "UNSTABLE: This request returns an array of max. 20 station objects matching the query. **CAUTION:** All\n     *      slashes (as well as encoded to %2F) in {query} need to be replaced, preferrably by a space (%20)",
+                "operationId": "indexStation",
+                "parameters": [
+                    {
+                        "name": "query",
+                        "in": "query",
+                        "description": "station query",
+                        "example": "Karls"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/StationResource"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "503": {
+                        "description": "There has been an error with our data provider"
+                    }
+                },
+                "security": [
+                    {
+                        "passport": [
+                            "create-statuses"
+                        ]
+                    },
+                    {
+                        "token": []
+                    }
+                ]
+            }
+        },
+        "/stations/{id}": {
+            "get": {
+                "tags": [
+                    "Checkin"
+                ],
+                "summary": "Show station",
+                "description": "This request returns a single station object",
+                "operationId": "showStation",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "station id",
+                        "example": "1337"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/StationResource"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "503": {
+                        "description": "There has been an error with our data provider"
+                    }
+                },
+                "security": [
+                    {
+                        "passport": [
+                            "create-statuses"
                         ]
                     },
                     {
@@ -1788,7 +1846,7 @@
                                                     "items": {
                                                         "properties": {
                                                             "name": {
-                                                                "$ref": "#/components/schemas/BusinessEnum"
+                                                                "$ref": "#/components/schemas/Business"
                                                             },
                                                             "count": {
                                                                 "type": "integer",
@@ -1809,7 +1867,7 @@
                                                     "items": {
                                                         "properties": {
                                                             "name": {
-                                                                "$ref": "#/components/schemas/TrainCategoryEnum"
+                                                                "$ref": "#/components/schemas/HafasTravelType"
                                                             },
                                                             "count": {
                                                                 "type": "integer",
@@ -2068,69 +2126,6 @@
                 "summary": "Get paginated statuses of personal dashboard",
                 "description": "Returns paginated statuses of personal dashboard",
                 "operationId": "getDashboard",
-                "parameters": [
-                    {
-                        "name": "page",
-                        "in": "query",
-                        "description": "Page of pagination",
-                        "required": false,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "successful operation",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/components/schemas/StatusResource"
-                                            }
-                                        },
-                                        "links": {
-                                            "$ref": "#/components/schemas/Links"
-                                        },
-                                        "meta": {
-                                            "$ref": "#/components/schemas/PaginationMeta"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request"
-                    },
-                    "401": {
-                        "description": "Not logged in"
-                    }
-                },
-                "security": [
-                    {
-                        "passport": [
-                            "read-statuses"
-                        ]
-                    },
-                    {
-                        "token": []
-                    }
-                ]
-            }
-        },
-        "/dashboard/global": {
-            "get": {
-                "tags": [
-                    "Dashboard"
-                ],
-                "summary": "Get paginated statuses of global dashboard",
-                "description": "Returns paginated statuses of global dashboard",
-                "operationId": "getGlobalDashboard",
                 "parameters": [
                     {
                         "name": "page",
@@ -2656,7 +2651,16 @@
                                 "schema": {
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/Stopovers"
+                                            "properties": {
+                                                "1": {
+                                                    "description": "Array of stopovers. Key describes trip id",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/StopoverResource"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
                                         }
                                     },
                                     "type": "object"
@@ -2713,7 +2717,7 @@
                     "401": {
                         "description": "Unauthorized"
                     },
-                    "404": {
+                    "204": {
                         "description": "No active checkin"
                     }
                 },
@@ -3098,7 +3102,7 @@
                         "description": "Means of transport (default: all)",
                         "required": false,
                         "schema": {
-                            "$ref": "#/components/schemas/TravelTypeEnum"
+                            "$ref": "#/components/schemas/TravelType"
                         }
                     }
                 ],
@@ -3299,45 +3303,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "properties": {
-                                        "data": {
-                                            "properties": {
-                                                "id": {
-                                                    "type": "int64",
-                                                    "example": 1
-                                                },
-                                                "category": {
-                                                    "$ref": "#/components/schemas/TrainCategoryEnum"
-                                                },
-                                                "number": {
-                                                    "type": "string",
-                                                    "example": "4-a6s4-4"
-                                                },
-                                                "lineName": {
-                                                    "type": "string",
-                                                    "example": "S 4"
-                                                },
-                                                "journeyNumber": {
-                                                    "type": "int64",
-                                                    "example": "34427"
-                                                },
-                                                "origin": {
-                                                    "$ref": "#/components/schemas/Station"
-                                                },
-                                                "destination": {
-                                                    "$ref": "#/components/schemas/Station"
-                                                },
-                                                "stopovers": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "$ref": "#/components/schemas/Stopover"
-                                                    }
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
+                                    "$ref": "#/components/schemas/TripResource"
                                 }
                             }
                         }
@@ -3440,8 +3406,8 @@
                 "tags": [
                     "Checkin"
                 ],
-                "summary": "Create a checkin",
-                "operationId": "createTrainCheckin",
+                "summary": "Check in to a trip.",
+                "operationId": "createCheckin",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -3458,7 +3424,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/CheckinResponse"
+                                    "$ref": "#/components/schemas/CheckinSuccessResource"
                                 }
                             }
                         }
@@ -3466,11 +3432,21 @@
                     "400": {
                         "description": "Bad request"
                     },
-                    "409": {
-                        "description": "Checkin collision"
-                    },
                     "401": {
                         "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CheckinForbiddenWithUsersResponse"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Checkin collision"
                     }
                 },
                 "security": [
@@ -3639,6 +3615,205 @@
                 ]
             }
         },
+        "/user/{user}/trusted": {
+            "get": {
+                "tags": [
+                    "User"
+                ],
+                "summary": "Get all trusted users for a user",
+                "description": "Get all trusted users for the current user or a specific user (admin only).",
+                "operationId": "trustedUserIndex",
+                "parameters": [
+                    {
+                        "name": "user",
+                        "in": "path",
+                        "description": "ID of the user (or string 'self' for current user)",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of trusted users",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/TrustedUserResource"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "User not found"
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "User"
+                ],
+                "summary": "Add a user to the trusted users for a user",
+                "description": "Add a user to the trusted users for the current user or a specific user (admin only).",
+                "operationId": "trustedUserStore",
+                "parameters": [
+                    {
+                        "name": "user",
+                        "in": "path",
+                        "description": "ID of the user (or string 'self' for current user) who want's to trust.",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "user_id"
+                                ],
+                                "properties": {
+                                    "userId": {
+                                        "type": "integer",
+                                        "example": "1"
+                                    },
+                                    "expiresAt": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2024-07-28T00:00:00Z",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "User added to trusted users"
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "User not found"
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        },
+        "/user/self/trusted-by": {
+            "get": {
+                "tags": [
+                    "User"
+                ],
+                "summary": "Get all users who trust the current user",
+                "operationId": "trustedByUserIndex",
+                "responses": {
+                    "200": {
+                        "description": "List of users who trust the current user",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/TrustedUserResource"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        },
+        "/user/{user}/trusted/{trusted}": {
+            "delete": {
+                "tags": [
+                    "User"
+                ],
+                "summary": "Remove a user from the trusted users for a user",
+                "description": "Remove a user from the trusted users for the current user or a specific user (admin only).",
+                "operationId": "trustedUserDestroy",
+                "parameters": [
+                    {
+                        "name": "user",
+                        "in": "path",
+                        "description": "ID of the user (or string 'self' for current user)",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "trusted",
+                        "in": "path",
+                        "description": "ID of the trusted user",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "User removed from trusted users"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden"
+                    },
+                    "404": {
+                        "description": "User not found"
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        },
         "/settings/account": {
             "delete": {
                 "tags": [
@@ -3796,7 +3971,7 @@
                                 "schema": {
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/User"
+                                            "$ref": "#/components/schemas/UserResource"
                                         }
                                     },
                                     "type": "object"
@@ -3843,7 +4018,7 @@
                                     "userId": {
                                         "title": "userId",
                                         "description": "ID of the to-be-blocked user",
-                                        "format": "int64",
+                                        "format": "int",
                                         "example": 1
                                     }
                                 },
@@ -3860,7 +4035,7 @@
                                 "schema": {
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/User"
+                                            "$ref": "#/components/schemas/UserResource"
                                         }
                                     },
                                     "type": "object"
@@ -3911,7 +4086,7 @@
                                     "userId": {
                                         "title": "userId",
                                         "description": "ID of the to-be-unblocked user",
-                                        "format": "int64",
+                                        "format": "int",
                                         "example": 1
                                     }
                                 },
@@ -3928,7 +4103,7 @@
                                 "schema": {
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/User"
+                                            "$ref": "#/components/schemas/UserResource"
                                         }
                                     },
                                     "type": "object"
@@ -3991,7 +4166,7 @@
                                 "schema": {
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/User"
+                                            "$ref": "#/components/schemas/UserResource"
                                         }
                                     },
                                     "type": "object"
@@ -4049,7 +4224,7 @@
                                 "schema": {
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/components/schemas/User"
+                                            "$ref": "#/components/schemas/UserResource"
                                         }
                                     },
                                     "type": "object"
@@ -4082,7 +4257,7 @@
                 ]
             }
         },
-        "/user/search/{query}": {
+        "/user/search/{?query}": {
             "get": {
                 "tags": [
                     "User"
@@ -4094,7 +4269,7 @@
                     {
                         "name": "query",
                         "in": "path",
-                        "description": "username",
+                        "description": "If this is given, the search will be performed on the username and (display)name (or-search)",
                         "example": "Gertrud123"
                     },
                     {
@@ -4105,6 +4280,16 @@
                         "schema": {
                             "type": "integer"
                         }
+                    },
+                    {
+                        "name": "username",
+                        "in": "query",
+                        "description": "Search for parts username"
+                    },
+                    {
+                        "name": "name",
+                        "in": "query",
+                        "description": "Search for parts of users (display)name"
                     }
                 ],
                 "responses": {
@@ -4117,7 +4302,7 @@
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/components/schemas/User"
+                                                "$ref": "#/components/schemas/UserResource"
                                             }
                                         },
                                         "links": {
@@ -4153,7 +4338,7 @@
                 "tags": [
                     "Webhooks"
                 ],
-                "summary": "Get webhooks for current user and current application",
+                "summary": "Get webhooks for current user and current application.",
                 "description": "Returns all webhooks which are created for the current user and which the current authorized applicaton has access to.",
                 "operationId": "getWebhooks",
                 "responses": {
@@ -4244,7 +4429,7 @@
                 "tags": [
                     "Webhooks"
                 ],
-                "summary": "Delete a webhook if the user and application are authorized to do",
+                "summary": "Delete a webhook if the user and application is authorized to do",
                 "description": "",
                 "operationId": "deleteWebhook",
                 "parameters": [
@@ -4259,15 +4444,8 @@
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "successful operation",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/SuccessResponse"
-                                }
-                            }
-                        }
+                    "204": {
+                        "description": "Webhook deleted."
                     },
                     "400": {
                         "description": "Bad request"
@@ -4282,6 +4460,40 @@
                 "security": [
                     {
                         "passport": []
+                    },
+                    {
+                        "token": []
+                    }
+                ]
+            }
+        },
+        "/year-in-review": {
+            "get": {
+                "tags": [
+                    "Statistics"
+                ],
+                "summary": "Returns the year in review for the given year and authenticated user",
+                "description": "Please note: This endpoint is only available when the year in review feature is enabled in the backend configuration. There is no full documentation - this endpoint may change every year.",
+                "operationId": "getYearInReview",
+                "responses": {
+                    "200": {
+                        "description": "JSON object with the year in review data. The structure of the object may change every year. There is no full documentation at this point."
+                    },
+                    "400": {
+                        "description": "Bad request"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Year in review is not active"
+                    }
+                },
+                "security": [
+                    {
+                        "passport": [
+                            "create-statuses"
+                        ]
                     },
                     {
                         "token": []
@@ -4382,7 +4594,7 @@
                         "title": "statusId",
                         "description": "ID of status",
                         "type": "integer",
-                        "format": "int64",
+                        "format": "int",
                         "example": 12345,
                         "deprecated": true
                     }
@@ -4397,12 +4609,12 @@
                 "description": "Mentioned user and position in status body",
                 "properties": {
                     "user": {
-                        "$ref": "#/components/schemas/User"
+                        "$ref": "#/components/schemas/UserResource"
                     },
                     "position": {
                         "title": "position",
                         "type": "integer",
-                        "format": "int64",
+                        "format": "int",
                         "example": 0
                     },
                     "length": {
@@ -4451,7 +4663,8 @@
                         "title": "ibnr",
                         "description": "IBNR of the station",
                         "type": "integer",
-                        "example": "8000191"
+                        "example": "8000191",
+                        "nullable": true
                     },
                     "rilIdentifier": {
                         "title": "rilIdentifier",
@@ -4465,6 +4678,337 @@
                 "xml": {
                     "name": "Station"
                 }
+            },
+            "Business": {
+                "title": "Business",
+                "description": "What type of travel (0=private, 1=business, 2=commute) did the user specify?",
+                "type": "integer",
+                "enum": [
+                    0,
+                    1,
+                    2
+                ],
+                "example": 0
+            },
+            "DataProvider": {
+                "title": "DataProvider",
+                "description": "What type of data provider did the user specify? (users need to be in closed-beta for this to take effect)",
+                "type": "string",
+                "enum": [
+                    "default",
+                    "transitous"
+                ],
+                "example": "cargo"
+            },
+            "HafasTravelType": {
+                "title": "category",
+                "description": "Category of transport. ",
+                "type": "string",
+                "enum": [
+                    "nationalExpress",
+                    "national",
+                    "regionalExp",
+                    "regional",
+                    "suburban",
+                    "bus",
+                    "ferry",
+                    "subway",
+                    "tram",
+                    "taxi",
+                    "plane"
+                ],
+                "example": "suburban"
+            },
+            "MapProvider": {
+                "title": "MapProvider",
+                "description": "What type of map provider (cargo, open-railway-map) did the user specify?",
+                "type": "string",
+                "enum": [
+                    "cargo",
+                    "open-railway-map"
+                ],
+                "example": "cargo"
+            },
+            "MastodonVisibility": {
+                "title": "visibility",
+                "description": "What type of visibility (0=public, 1=unlisted, 2=followers, 3=private) did the user specify for\n *     future posts to Mastodon? Some instances such as chaos.social discourage bot posts on public timelines.",
+                "type": "integer",
+                "enum": [
+                    0,
+                    1,
+                    2,
+                    3
+                ],
+                "example": 1
+            },
+            "PointReason": {
+                "title": "PointsReason",
+                "description": "What is the reason for the points calculation factor? (0=in time => 100%, 1=good enough => 25%, 2=not sufficient (1 point), 3=forced => no points, 4=manual trip => no points, 5=points disabled)",
+                "type": "integer",
+                "enum": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
+                ],
+                "example": 1
+            },
+            "StatusVisibility": {
+                "title": "visibility",
+                "description": "What type of visibility (0=public, 1=unlisted, 2=followers, 3=private, 4=authenticated) did the\n *      user specify?",
+                "type": "integer",
+                "enum": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "example": 0
+            },
+            "TravelType": {
+                "title": "travelType",
+                "description": "When adding a new travel type, make sure to add it to the translation file as well.",
+                "type": "string",
+                "enum": [
+                    "express",
+                    "regional",
+                    "suburban",
+                    "bus",
+                    "ferry",
+                    "subway",
+                    "tram",
+                    "taxi",
+                    "plane"
+                ],
+                "example": "suburban"
+            },
+            "FriendCheckinSetting": {
+                "title": "FriendCheckinSetting",
+                "type": "string",
+                "enum": [
+                    "forbidden",
+                    "friends",
+                    "list"
+                ],
+                "example": "forbidden"
+            },
+            "UpdateProfileInformationRequest": {
+                "title": "UpdateProfileInformationRequest",
+                "description": "UpdateProfileInformationRequest",
+                "properties": {
+                    "username": {
+                        "type": "string",
+                        "maxLength": 25,
+                        "example": "gertrud123"
+                    },
+                    "displayName": {
+                        "type": "string",
+                        "maxLength": 50,
+                        "example": "Gertrud"
+                    },
+                    "privateProfile": {
+                        "type": "boolean",
+                        "example": false,
+                        "nullable": true
+                    },
+                    "preventIndex": {
+                        "type": "boolean",
+                        "example": false,
+                        "nullable": true
+                    },
+                    "privacyHideDays": {
+                        "type": "integer",
+                        "example": 1,
+                        "nullable": true
+                    },
+                    "defaultStatusVisibility": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/StatusVisibility"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "mastodonVisibility": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/MastodonVisibility"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "mapProvider": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/MapProvider"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "friendCheckin": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/FriendCheckinSetting"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "likesEnabled": {
+                        "type": "boolean",
+                        "example": true,
+                        "nullable": true
+                    },
+                    "pointsEnabled": {
+                        "type": "boolean",
+                        "example": true,
+                        "nullable": true
+                    },
+                    "bio": {
+                        "type": "string",
+                        "maxLength": 500,
+                        "example": "Hi there! I am Gertrud!",
+                        "nullable": true
+                    },
+                    "experimental": {
+                        "description": "Experimental features enabled",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "profileLinks": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ProfileLinkResource"
+                        },
+                        "nullable": true
+                    },
+                    "timezone": {
+                        "type": "string",
+                        "example": "Europe/Berlin"
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "maxLength": 255,
+                        "example": "mail@example.com"
+                    }
+                },
+                "type": "object"
+            },
+            "AlertResource": {
+                "required": [
+                    "id",
+                    "type",
+                    "active_from",
+                    "active_until",
+                    "url",
+                    "translations"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "123e4567-e89b-12d3-a456-426614174000"
+                    },
+                    "type": {
+                        "type": "enum",
+                        "enum": [
+                            "info",
+                            "warning",
+                            "danger",
+                            "success"
+                        ],
+                        "example": "info"
+                    },
+                    "active_from": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2023-10-01T00:00:00Z"
+                    },
+                    "active_until": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2023-10-31T23:59:59Z",
+                        "nullable": true
+                    },
+                    "url": {
+                        "type": "string",
+                        "example": "https://example.com",
+                        "nullable": true
+                    },
+                    "translations": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AlertTranslationResource"
+                        }
+                    }
+                },
+                "type": "object"
+            },
+            "AlertTranslationResource": {
+                "required": [
+                    "title",
+                    "content",
+                    "url",
+                    "locale"
+                ],
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "example": "Alert Title"
+                    },
+                    "content": {
+                        "type": "string",
+                        "example": "Alert Content"
+                    },
+                    "url": {
+                        "type": "string",
+                        "example": "https://example.com"
+                    },
+                    "locale": {
+                        "type": "string",
+                        "example": "en"
+                    }
+                },
+                "type": "object"
+            },
+            "AreaResource": {
+                "title": "Area",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Karlsruhe"
+                    },
+                    "default": {
+                        "type": "boolean",
+                        "example": "true"
+                    },
+                    "adminLevel": {
+                        "type": "integer",
+                        "example": "1"
+                    }
+                },
+                "type": "object"
+            },
+            "CheckinSuccessResource": {
+                "title": "CheckinResponse",
+                "properties": {
+                    "status": {
+                        "$ref": "#/components/schemas/StatusResource"
+                    },
+                    "points": {
+                        "$ref": "#/components/schemas/Points"
+                    },
+                    "alsoOnThisconnection": {
+                        "description": "Statuses of other people on this connection",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StatusResource"
+                        }
+                    }
+                },
+                "type": "object"
             },
             "ClientResource": {
                 "title": "Client",
@@ -4481,6 +5025,20 @@
                     "privacyPolicyUrl": {
                         "type": "string",
                         "example": "https://traewelling.de/privacy-policy"
+                    }
+                },
+                "type": "object"
+            },
+            "DataSourceResource": {
+                "title": "DataSourceResource",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "foobar"
+                    },
+                    "attribution": {
+                        "type": "string",
+                        "example": "Provided by foobar under CC BY 4.0"
                     }
                 },
                 "type": "object"
@@ -4553,15 +5111,8 @@
             "LeaderboardUserResource": {
                 "title": "LeaderboardUserResource",
                 "properties": {
-                    "username": {
-                        "description": "username of user",
-                        "type": "string",
-                        "example": "Gertrud123"
-                    },
-                    "profilePicture": {
-                        "description": "URL of the profile picture of the user",
-                        "type": "string",
-                        "example": "https://traewelling.de/@Gertrud123/picture"
+                    "user": {
+                        "$ref": "#/components/schemas/LightUserResource"
                     },
                     "totalDuration": {
                         "description": "duration travelled in minutes",
@@ -4628,6 +5179,30 @@
                 },
                 "type": "object"
             },
+            "ProfileLinkResource": {
+                "title": "ProfileLinkResource",
+                "description": "ProfileLinkResource",
+                "properties": {
+                    "name": {
+                        "type": "enum",
+                        "enum": [
+                            "website",
+                            "instagram",
+                            "twitter",
+                            "facebook",
+                            "mastodon",
+                            "tiktok",
+                            "github"
+                        ],
+                        "example": "website"
+                    },
+                    "url": {
+                        "type": "string",
+                        "example": "https://traewelling.de"
+                    }
+                },
+                "type": "object"
+            },
             "StationResource": {
                 "title": "Station",
                 "properties": {
@@ -4654,6 +5229,12 @@
                     "rilIdentifier": {
                         "type": "string",
                         "example": "RK"
+                    },
+                    "areas": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AreaResource"
+                        }
                     }
                 },
                 "type": "object"
@@ -4677,10 +5258,10 @@
                         }
                     },
                     "business": {
-                        "$ref": "#/components/schemas/BusinessEnum"
+                        "$ref": "#/components/schemas/Business"
                     },
                     "visibility": {
-                        "$ref": "#/components/schemas/VisibilityEnum"
+                        "$ref": "#/components/schemas/StatusVisibility"
                     },
                     "likes": {
                         "description": "How many people have liked this status",
@@ -4707,7 +5288,7 @@
                         "example": "2022-07-17T13:37:00+02:00"
                     },
                     "train": {
-                        "description": "Train model"
+                        "$ref": "#/components/schemas/TransportResource"
                     },
                     "event": {
                         "oneOf": [
@@ -4719,6 +5300,269 @@
                     },
                     "userDetails": {
                         "$ref": "#/components/schemas/LightUserResource"
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StatusTagResource"
+                        }
+                    }
+                },
+                "type": "object"
+            },
+            "StatusTagResource": {
+                "title": "StatusTagResource",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "example": "trwl:vehicle_number"
+                    },
+                    "value": {
+                        "type": "string",
+                        "example": "94 80 0450 921 D-AVG"
+                    },
+                    "visibility": {
+                        "type": "integer",
+                        "example": "1"
+                    }
+                },
+                "type": "object"
+            },
+            "StopoverResource": {
+                "title": "StopoverResource",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 12345
+                    },
+                    "name": {
+                        "description": "name of the station",
+                        "type": "string",
+                        "example": "Karlsruhe Hbf"
+                    },
+                    "rilIdentifier": {
+                        "description": "Identifier specified in 'Richtline 100' of the Deutsche Bahn",
+                        "type": "string",
+                        "example": "RK",
+                        "nullable": true
+                    },
+                    "evaIdentifier": {
+                        "description": "IBNR identifier of Deutsche Bahn",
+                        "type": "string",
+                        "example": "8000191",
+                        "nullable": true
+                    },
+                    "arrival": {
+                        "description": "currently known arrival time. Equal to arrivalReal if known. Else equal to arrivalPlanned.",
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2022-07-17T13:37:00+02:00",
+                        "nullable": true
+                    },
+                    "arrivalPlanned": {
+                        "description": "planned arrival according to timetable records",
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2022-07-17T13:37:00+02:00",
+                        "nullable": true
+                    },
+                    "arrivalReal": {
+                        "description": "real arrival according to live data",
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2022-07-17T13:37:00+02:00",
+                        "nullable": true
+                    },
+                    "arrivalPlatformPlanned": {
+                        "description": "planned arrival platform according to timetable records",
+                        "type": "string",
+                        "example": "5",
+                        "nullable": true
+                    },
+                    "arrivalPlatformReal": {
+                        "description": "real arrival platform according to live data",
+                        "type": "string",
+                        "example": "5 A-F",
+                        "nullable": true
+                    },
+                    "departure": {
+                        "description": "currently known departure time. Equal to departureReal if known. Else equal to departurePlanned.",
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2022-07-17T13:37:00+02:00",
+                        "nullable": true
+                    },
+                    "departurePlanned": {
+                        "description": "planned departure according to timetable records",
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2022-07-17T13:37:00+02:00",
+                        "nullable": true
+                    },
+                    "departureReal": {
+                        "description": "real departure according to live data",
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2022-07-17T13:37:00+02:00",
+                        "nullable": true
+                    },
+                    "departurePlatformPlanned": {
+                        "description": "planned departure platform according to timetable records",
+                        "type": "string",
+                        "example": "5",
+                        "nullable": true
+                    },
+                    "departurePlatformReal": {
+                        "description": "real departure platform according to live data",
+                        "type": "string",
+                        "example": "5 A-F",
+                        "nullable": true
+                    },
+                    "platform": {
+                        "type": "string",
+                        "example": "5 A-F",
+                        "nullable": true
+                    },
+                    "isArrivalDelayed": {
+                        "description": "Is there a delay in the arrival time?",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "isDepartureDelayed": {
+                        "description": "Is there a delay in the departure time?",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "cancelled": {
+                        "description": "is this stopover cancelled?",
+                        "type": "boolean",
+                        "example": false
+                    }
+                },
+                "type": "object"
+            },
+            "TransportResource": {
+                "title": "TransportResource",
+                "properties": {
+                    "trip": {
+                        "type": "integer",
+                        "example": "4711"
+                    },
+                    "hafasId": {
+                        "type": "string",
+                        "example": "1|1234|567"
+                    },
+                    "category": {
+                        "$ref": "#/components/schemas/HafasTravelType"
+                    },
+                    "number": {
+                        "description": "Internal number of the journey",
+                        "example": "4-a6s8-8"
+                    },
+                    "lineName": {
+                        "type": "string",
+                        "example": "S 1"
+                    },
+                    "journeyNumber": {
+                        "type": "integer",
+                        "example": 85639
+                    },
+                    "distance": {
+                        "description": "Distance in meters",
+                        "type": "integer",
+                        "example": 10000
+                    },
+                    "points": {
+                        "type": "integer",
+                        "example": 37
+                    },
+                    "duration": {
+                        "description": "Duration in minutes",
+                        "type": "integer",
+                        "example": 30
+                    },
+                    "manualDeparture": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2022-07-17T13:37:00+02:00",
+                        "nullable": true
+                    },
+                    "manualArrival": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2022-07-17T13:37:00+02:00",
+                        "nullable": true
+                    },
+                    "origin": {
+                        "$ref": "#/components/schemas/StopoverResource"
+                    },
+                    "destination": {
+                        "$ref": "#/components/schemas/StopoverResource"
+                    },
+                    "operator": {
+                        "$ref": "#/components/schemas/OperatorResource"
+                    },
+                    "dataSource": {
+                        "$ref": "#/components/schemas/DataSourceResource"
+                    }
+                },
+                "type": "object"
+            },
+            "TripResource": {
+                "title": "TripResource",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "category": {
+                        "$ref": "#/components/schemas/HafasTravelType"
+                    },
+                    "number": {
+                        "type": "string",
+                        "example": "4-a6s4-4"
+                    },
+                    "lineName": {
+                        "type": "string",
+                        "example": "S 4"
+                    },
+                    "journeyNumber": {
+                        "type": "integer",
+                        "example": "34427"
+                    },
+                    "origin": {
+                        "$ref": "#/components/schemas/Station"
+                    },
+                    "destination": {
+                        "$ref": "#/components/schemas/Station"
+                    },
+                    "stopovers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StopoverResource"
+                        }
+                    },
+                    "dataSource": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/DataSourceResource"
+                            }
+                        ],
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "TrustedUserResource": {
+                "title": "TrustedUser",
+                "properties": {
+                    "user": {
+                        "$ref": "#/components/schemas/LightUserResource"
+                    },
+                    "expiresAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2024-07-28T00:00:00Z"
                     }
                 },
                 "type": "object"
@@ -4796,6 +5640,222 @@
                 },
                 "type": "object"
             },
+            "UserProfileSettingsResource": {
+                "title": "UserProfileSettings",
+                "required": [
+                    "username",
+                    "displayName",
+                    "profilePicture",
+                    "privateProfile",
+                    "preventIndex",
+                    "defaultStatusVisibility",
+                    "privacyHideDays",
+                    "password",
+                    "email",
+                    "emailVerified",
+                    "profilePictureSet",
+                    "likesEnabled",
+                    "pointsEnabled",
+                    "profileLinks",
+                    "mapProvider",
+                    "timezone",
+                    "experimental"
+                ],
+                "properties": {
+                    "username": {
+                        "type": "string",
+                        "example": "Gertrud123"
+                    },
+                    "displayName": {
+                        "type": "string",
+                        "example": "Gertrud"
+                    },
+                    "profilePicture": {
+                        "type": "string",
+                        "example": "https://traewelling.de/@Gertrud123/picture"
+                    },
+                    "privateProfile": {
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "preventIndex": {
+                        "description": "Did the user choose to prevent search engines from indexing their profile?",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "defaultStatusVisibility": {
+                        "$ref": "#/components/schemas/StatusVisibility"
+                    },
+                    "privacyHideDays": {
+                        "description": "Number of days to hide the user's location history",
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "password": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "email": {
+                        "type": "string",
+                        "example": "gertrud@traewelling.de"
+                    },
+                    "emailVerified": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "profilePictureSet": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "mastodon": {
+                        "type": "string",
+                        "example": "https://mastodon.social/@Gertrud123"
+                    },
+                    "mastodonVisibility": {
+                        "$ref": "#/components/schemas/MastodonVisibility"
+                    },
+                    "friendCheckin": {
+                        "$ref": "#/components/schemas/FriendCheckinSetting"
+                    },
+                    "likesEnabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "pointsEnabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "mapProvider": {
+                        "$ref": "#/components/schemas/MapProvider"
+                    },
+                    "timezone": {
+                        "type": "string",
+                        "example": "Europe/Berlin"
+                    },
+                    "bio": {
+                        "type": "string",
+                        "example": "Hi there! I am Gertrud!"
+                    },
+                    "profileLinks": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ProfileLinkResource"
+                        }
+                    },
+                    "experimental": {
+                        "description": "Experimental features enabled",
+                        "type": "boolean",
+                        "example": false
+                    }
+                },
+                "type": "object"
+            },
+            "UserResource": {
+                "title": "User",
+                "description": "User model",
+                "properties": {
+                    "id": {
+                        "description": "ID",
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "displayName": {
+                        "description": "Display name of the user",
+                        "example": "Gertrud"
+                    },
+                    "username": {
+                        "description": "username of user",
+                        "example": "Gertrud123"
+                    },
+                    "profilePicture": {
+                        "description": "URL of the profile picture of the user",
+                        "example": "https://traewelling.de/@Gertrud123/picture"
+                    },
+                    "trainDistance": {
+                        "description": "distance travelled by train in meters",
+                        "type": "integer",
+                        "example": 12345
+                    },
+                    "trainDuration": {
+                        "description": "duration travelled by train in minutes",
+                        "type": "integer",
+                        "example": 6
+                    },
+                    "points": {
+                        "description": "Current points of the last 7 days",
+                        "type": "integer",
+                        "example": 300
+                    },
+                    "mastodonUrl": {
+                        "description": "URL to the Mastodon profile of the user",
+                        "example": "https://chaos.social/@traewelling",
+                        "nullable": true
+                    },
+                    "privateProfile": {
+                        "description": "is this profile set to private?",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "points_enabled": {
+                        "description": "Does this profile allow points? Only offer the UI to show points at any status if this setting is set to true. If set to false, the points will always be displayed as 0",
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "likes_enabled": {
+                        "description": "Does this profile allow likes? Only offer the UI to like any status if this setting is set to true. If set to false, the likes API will return 403.",
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "pointsEnabled": {
+                        "description": "Does this profile allow points? Only offer the UI to show points at any status if this setting is set to true. If set to false, the points will always be displayed as 0",
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "userInvisibleToMe": {
+                        "description": "Can the currently authenticated user see the statuses of this user?",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "muted": {
+                        "description": "Is this user muted by the currently authenticated user?",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "following": {
+                        "description": "Does the currently authenticated user follow this user?",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "followPending": {
+                        "description": "Is there a currently pending follow request?",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "followedBy": {
+                        "description": "Is the user following you?",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "preventIndex": {
+                        "description": "Did the user choose to prevent search engines from indexing their profile?",
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "bio": {
+                        "description": "Bio of the user",
+                        "type": "string",
+                        "example": "Hi there! I am Gertrud!"
+                    },
+                    "profileLinks": {
+                        "description": "Profile links of the user",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ProfileLinkResource"
+                        }
+                    }
+                },
+                "type": "object"
+            },
             "BearerTokenResponse": {
                 "title": "BearerTokenResponse",
                 "properties": {
@@ -4822,116 +5882,93 @@
                 "description": "Fields for creating a train checkin",
                 "properties": {
                     "body": {
-                        "title": "body",
-                        "description": "Text that should be added to the post",
                         "type": "string",
                         "maxLength": 280,
                         "example": "Meine erste Fahrt nach Knuffingen!",
                         "nullable": true
                     },
                     "business": {
-                        "$ref": "#/components/schemas/BusinessEnum"
+                        "$ref": "#/components/schemas/Business"
                     },
                     "visibility": {
-                        "$ref": "#/components/schemas/VisibilityEnum"
+                        "$ref": "#/components/schemas/StatusVisibility"
                     },
                     "eventId": {
-                        "title": "eventId",
                         "description": "Id of an event the status should be connected to",
                         "type": "integer",
+                        "example": "1",
                         "nullable": true
                     },
                     "toot": {
-                        "title": "toot",
                         "description": "Should this status be posted to mastodon?",
                         "type": "boolean",
                         "example": "false",
                         "nullable": true
                     },
                     "chainPost": {
-                        "title": "chainPost",
                         "description": "Should this status be posted to mastodon as a chained post?",
                         "type": "boolean",
                         "example": "false",
                         "nullable": true
                     },
                     "ibnr": {
-                        "title": "ibnr",
-                        "description": "If true, the `start` and `destination` properties can be supplied as an ibnr. Otherwise they\n     *     should be given as the Träwelling-ID. Default behavior is `false`.",
+                        "description": "If true, the `start` and `destination` properties can be supplied as an ibnr. Otherwise they should be given as the Träwelling-ID. Default behavior is `false`.",
                         "type": "boolean",
                         "example": "true",
                         "nullable": true
                     },
                     "tripId": {
-                        "title": "tripId",
-                        "description": "The HAFAS tripId for the to be checked in train",
-                        "example": "1|323306|1|80|17072022"
+                        "description": "The tripId for the to be checked in train",
+                        "type": "string",
+                        "example": "b37ff515-22e1-463c-94de-3ad7964b5cb8",
+                        "nullable": true
                     },
                     "lineName": {
-                        "title": "lineName",
                         "description": "The line name for the to be checked in train",
-                        "example": "S 4"
+                        "type": "string",
+                        "example": "S 4",
+                        "nullable": true
                     },
                     "start": {
-                        "title": "start",
                         "description": "The Station-ID of the starting point (see `ibnr`)",
                         "type": "integer",
                         "example": "8000191"
                     },
                     "destination": {
-                        "title": "destination",
-                        "description": "The Station-ID of the destination (see `ibnr`)",
+                        "description": "The Station-ID of the destination point (see `ibnr`)",
                         "type": "integer",
-                        "example": "8079045"
+                        "example": "8000192"
                     },
                     "departure": {
-                        "title": "departure",
                         "description": "Timestamp of the departure",
+                        "type": "string",
+                        "format": "date-time",
                         "example": "2022-12-19T20:41:00+01:00"
                     },
                     "arrival": {
-                        "title": "arrival",
                         "description": "Timestamp of the arrival",
+                        "type": "string",
+                        "format": "date-time",
                         "example": "2022-12-19T20:42:00+01:00"
                     },
                     "force": {
-                        "title": "force",
-                        "description": "If true, the checkin will be created, even if a colliding checkin exists. No points will be\n     *     awarded.",
+                        "description": "If true, the checkin will be created, even if a colliding checkin exists. No points will be awarded.",
                         "type": "boolean",
                         "example": "false",
                         "nullable": true
-                    }
-                },
-                "type": "object",
-                "xml": {
-                    "name": "CheckinRequestBody"
-                }
-            },
-            "CheckinResponse": {
-                "title": "CheckinResponse",
-                "properties": {
-                    "status": {
-                        "title": "status",
-                        "description": "StatusModel of the created status",
-                        "type": "string",
-                        "example": ""
                     },
-                    "points": {
-                        "$ref": "#/components/schemas/Points"
-                    },
-                    "alsoOnThisConnection": {
-                        "title": "alsoOnThisconnection",
-                        "description": "Statuses of other people on this connection",
+                    "with": {
+                        "description": "If set, the checkin will be created for all given users as well. The user creating the checkin must be allowed to checkin for the other users. Max. 10 users.",
                         "type": "array",
                         "items": {
-                            "$ref": "#/components/schemas/StatusResource"
-                        }
+                            "type": "integer",
+                            "example": "1"
+                        },
+                        "example": "[1, 2]",
+                        "nullable": true
                     }
                 },
-                "type": "object",
-                "xml": {
-                    "name": "CheckinResponse"
-                }
+                "type": "object"
             },
             "EventSuggestion": {
                 "title": "EventSuggestion",
@@ -5195,7 +6232,7 @@
                         "title": "points",
                         "description": "points",
                         "type": "integer",
-                        "format": "int64",
+                        "format": "int",
                         "example": 1
                     },
                     "calculation": {
@@ -5239,7 +6276,7 @@
                         "example": 0.25
                     },
                     "reason": {
-                        "$ref": "#/components/schemas/PointsReasonEnum"
+                        "$ref": "#/components/schemas/PointReason"
                     }
                 },
                 "type": "object",
@@ -5286,6 +6323,27 @@
                     "name": "Polyline"
                 }
             },
+            "CheckinForbiddenWithUsersResponse": {
+                "title": "CheckinForbiddenWithUsersResponse",
+                "properties": {
+                    "message": {
+                        "example": "You are not allowed to check in the following users: 1"
+                    },
+                    "meta": {
+                        "properties": {
+                            "invalidUsers": {
+                                "type": "array",
+                                "items": {
+                                    "type": "integer",
+                                    "example": "1"
+                                }
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object"
+            },
             "StatusTag": {
                 "title": "StatusTag",
                 "description": "StatusTag model",
@@ -5303,153 +6361,12 @@
                         "example": "BahnCard 100"
                     },
                     "visibility": {
-                        "$ref": "#/components/schemas/VisibilityEnum"
+                        "$ref": "#/components/schemas/StatusVisibility"
                     }
                 },
                 "type": "object",
                 "xml": {
                     "name": "StatusTag"
-                }
-            },
-            "Stopover": {
-                "title": "Stopover",
-                "description": "stopover model",
-                "properties": {
-                    "id": {
-                        "title": "id",
-                        "description": "id",
-                        "type": "integer",
-                        "example": "12089"
-                    },
-                    "name": {
-                        "title": "name",
-                        "description": "name of the station",
-                        "type": "string",
-                        "example": "Karlsruhe Hbf"
-                    },
-                    "rilIdentifier": {
-                        "title": "rilIdentifier",
-                        "description": "Identifier specified in 'Richtline 100' of the Deutsche Bahn",
-                        "type": "string",
-                        "example": "RK",
-                        "nullable": "true"
-                    },
-                    "evaIdentifier": {
-                        "title": "evaIdentifier",
-                        "description": "IBNR identifier of Deutsche Bahn",
-                        "type": "integer",
-                        "example": "8000191"
-                    },
-                    "arrival": {
-                        "title": "arrival",
-                        "description": "currently known arrival time. Equal to arrivalReal if known. Else equal to arrivalPlanned.",
-                        "example": "2022-07-17T14:17:00+02:00",
-                        "nullable": true
-                    },
-                    "arrivalPlanned": {
-                        "title": "arrivalPlanned",
-                        "description": "planned arrival according to timetable records",
-                        "example": "2022-07-17T14:17:00+02:00",
-                        "nullable": true
-                    },
-                    "arrivalReal": {
-                        "title": "arrivalReal",
-                        "description": "real arrival according to live data",
-                        "example": "2022-07-17T14:17:00+02:00",
-                        "nullable": true
-                    },
-                    "arrivalPlatformPlanned": {
-                        "title": "arrivalPlatformPlanned",
-                        "description": "planned arrival platform according to timetable records",
-                        "type": "string",
-                        "example": "3",
-                        "nullable": true
-                    },
-                    "arrivalPlatformReal": {
-                        "title": "arrivalPlatformReal",
-                        "description": "real arrival platform according to live data",
-                        "type": "string",
-                        "example": "3",
-                        "nullable": true
-                    },
-                    "departure": {
-                        "title": "departure",
-                        "description": "currently known departure time. Equal to departureReal if known. Else equal to\n     *     departurePlanned.",
-                        "example": "2022-07-17T14:17:00+02:00",
-                        "nullable": true
-                    },
-                    "departurePlanned": {
-                        "title": "departurePlanned",
-                        "description": "planned departure according to timetable records",
-                        "example": "2022-07-17T14:17:00+02:00",
-                        "nullable": true
-                    },
-                    "departureReal": {
-                        "title": "departureReal",
-                        "description": "real departure according to live data",
-                        "example": "2022-07-17T14:17:00+02:00",
-                        "nullable": true
-                    },
-                    "departurePlatformPlanned": {
-                        "title": "departurePlatformPlanned",
-                        "description": "planned departure platform according to timetable records",
-                        "type": "string",
-                        "example": "3",
-                        "nullable": true
-                    },
-                    "departurePlatformReal": {
-                        "title": "departurePlatformReal",
-                        "description": "real departure platform according to live data",
-                        "type": "string",
-                        "example": "3",
-                        "nullable": true
-                    },
-                    "platform": {
-                        "title": "platform",
-                        "description": "platform",
-                        "type": "string",
-                        "example": "3",
-                        "nullable": "true"
-                    },
-                    "isArrivalDelayed": {
-                        "title": "isArrivalDelayed",
-                        "description": "Is there a delay in the arrival time?",
-                        "type": "boolean",
-                        "example": false
-                    },
-                    "isDepartureDelayed": {
-                        "title": "isDepartureDelayed",
-                        "description": "Is there a delay in the departure time?",
-                        "type": "boolean",
-                        "example": false
-                    },
-                    "cancelled": {
-                        "title": "cancelled",
-                        "description": "is this stopover cancelled?",
-                        "type": "boolean",
-                        "example": false
-                    }
-                },
-                "type": "object",
-                "xml": {
-                    "name": "Stopover"
-                }
-            },
-            "Stopovers": {
-                "title": "Stopovers",
-                "description": "Stopovers of a single status",
-                "properties": {
-                    "1": {
-                        "description": "Array of stopovers. Key describes trip id",
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/Stopover"
-                        }
-                    }
-                },
-                "type": "object",
-                "xml": {
-                    "name": "Stopovers"
                 }
             },
             "SuccessResponse": {
@@ -5468,270 +6385,6 @@
                     "name": "SuccessResponse"
                 }
             },
-            "Trip": {
-                "title": "Trip",
-                "description": "Trip model",
-                "properties": {
-                    "trip": {
-                        "title": "trip",
-                        "description": "ID",
-                        "type": "integer",
-                        "example": 1
-                    },
-                    "hafasId": {
-                        "title": "hafasId",
-                        "description": "Deutsche bahn internal HAFAS ID",
-                        "type": "string",
-                        "example": "1|323306|1|80|17072022"
-                    },
-                    "category": {
-                        "$ref": "#/components/schemas/TrainCategoryEnum"
-                    },
-                    "number": {
-                        "title": "number",
-                        "description": "number of train",
-                        "type": "string",
-                        "example": "4-a6s4-4"
-                    },
-                    "journeyNumber": {
-                        "title": "journeyNumber",
-                        "description": "The number of the journey. Given by the transport company.",
-                        "type": "integer",
-                        "example": "3697",
-                        "nullable": true
-                    },
-                    "lineName": {
-                        "title": "lineName",
-                        "description": "name of the transport line",
-                        "type": "string",
-                        "example": "S 4"
-                    },
-                    "distance": {
-                        "title": "distance",
-                        "description": "travelled distance of this checkin in meters",
-                        "type": "integer",
-                        "example": 3349
-                    },
-                    "points": {
-                        "title": "points",
-                        "description": "points achieved for this checkin",
-                        "type": "integer",
-                        "example": 7
-                    },
-                    "duration": {
-                        "title": "duration",
-                        "description": "time traveled in this checkin in minutes",
-                        "type": "integer",
-                        "example": 7
-                    },
-                    "origin": {
-                        "$ref": "#/components/schemas/Stopover"
-                    },
-                    "destination": {
-                        "$ref": "#/components/schemas/Stopover"
-                    },
-                    "operator": {
-                        "title": "operator",
-                        "description": "Operator of the mean of transport",
-                        "nullable": true
-                    }
-                },
-                "type": "object",
-                "xml": {
-                    "name": "Trip"
-                }
-            },
-            "User": {
-                "title": "User",
-                "description": "User model",
-                "properties": {
-                    "id": {
-                        "title": "ID",
-                        "description": "ID",
-                        "type": "integer",
-                        "format": "int64",
-                        "example": 1
-                    },
-                    "displayName": {
-                        "title": "displayName",
-                        "description": "Display name of the user",
-                        "example": "Gertrud"
-                    },
-                    "username": {
-                        "title": "username",
-                        "description": "username of user",
-                        "type": "string",
-                        "example": "Gertrud123"
-                    },
-                    "profilePicture": {
-                        "title": "profilePicture",
-                        "description": "URL of the profile picture of the user",
-                        "type": "integer",
-                        "example": "https://traewelling.de/@Gertrud123/picture"
-                    },
-                    "trainDistance": {
-                        "title": "trainDistance",
-                        "description": "distance travelled by train in meters",
-                        "type": "integer",
-                        "format": "int64",
-                        "example": 12345
-                    },
-                    "trainDuration": {
-                        "title": "trainDuration",
-                        "description": "duration travelled by train in minutes",
-                        "type": "integer",
-                        "format": "int64",
-                        "example": 6
-                    },
-                    "points": {
-                        "title": "points",
-                        "description": "Current points of the last 7 days",
-                        "type": "integer",
-                        "format": "int64",
-                        "example": 300
-                    },
-                    "mastodonUrl": {
-                        "title": "mastodonUrl",
-                        "description": "URL to the Mastodon profile of the user",
-                        "type": "string",
-                        "example": "https://chaos.social/@traewelling",
-                        "nullable": true
-                    },
-                    "privateProfile": {
-                        "title": "privateProfile",
-                        "description": "is this profile set to private?",
-                        "type": "boolean",
-                        "example": false
-                    },
-                    "likes_enabled": {
-                        "title": "likes_enabled",
-                        "description": "Does this profile allow likes? Only offer the UI to like any status if this setting is set to true. If set to false, the likes API will return 403.",
-                        "type": "boolean",
-                        "example": true
-                    },
-                    "userInvisibleToMe": {
-                        "title": "userInvisibleToMe",
-                        "description": "Can the currently authenticated user see the statuses of this user?",
-                        "type": "boolean",
-                        "example": false
-                    },
-                    "muted": {
-                        "title": "muted",
-                        "description": "Is this user muted by the currently authenticated user?",
-                        "type": "boolean",
-                        "example": false
-                    },
-                    "following": {
-                        "title": "following",
-                        "description": "Does the currently authenticated user follow this user?",
-                        "type": "boolean",
-                        "example": false
-                    },
-                    "followPending": {
-                        "title": "followPending",
-                        "description": "Is there a currently pending follow request?",
-                        "type": "boolean",
-                        "example": false
-                    },
-                    "preventIndex": {
-                        "title": "preventIndex",
-                        "description": "Did the user choose to prevent search engines from indexing their profile?",
-                        "type": "boolean",
-                        "example": false
-                    }
-                },
-                "type": "object",
-                "xml": {
-                    "name": "User"
-                }
-            },
-            "UserProfileSettings": {
-                "title": "UserProfileSettings",
-                "description": "Model for all user profile settings",
-                "properties": {
-                    "username": {
-                        "title": "username",
-                        "description": "username",
-                        "type": "string",
-                        "example": "Gertrud123"
-                    },
-                    "displayName": {
-                        "title": "displayName",
-                        "description": "Display name of the user",
-                        "example": "Gertrud"
-                    },
-                    "profilePicture": {
-                        "title": "profilePicture",
-                        "description": "URL of the profile picture of the user",
-                        "type": "integer",
-                        "example": "https://traewelling.de/@Gertrud123/picture"
-                    },
-                    "privateProfile": {
-                        "title": "privateProfile",
-                        "description": "Is the profile private?",
-                        "type": "boolean",
-                        "format": "boolean",
-                        "example": false
-                    },
-                    "preventIndex": {
-                        "title": "preventIndex",
-                        "description": "Did the user choose to prevent search engines from indexing their profile?",
-                        "type": "boolean",
-                        "format": "boolean",
-                        "example": false
-                    },
-                    "defaultStatusVisibility": {
-                        "$ref": "#/components/schemas/VisibilityEnum"
-                    },
-                    "privacyHideDays": {
-                        "title": "privacyHideDays",
-                        "description": "Number of days after which a status is hidden from the public",
-                        "format": "int64",
-                        "example": 1,
-                        "nullable": true
-                    },
-                    "password": {
-                        "title": "password",
-                        "description": "Does the user have a password set?",
-                        "type": "boolean",
-                        "format": "boolean",
-                        "example": true
-                    },
-                    "email": {
-                        "title": "email",
-                        "description": "The email address of the user",
-                        "type": "string",
-                        "example": "gertrud@example.com",
-                        "nullable": true
-                    },
-                    "emailVerified": {
-                        "title": "emailVerified",
-                        "description": "Is the email address verified?",
-                        "type": "boolean",
-                        "format": "boolean",
-                        "example": "https://chaos.social/@traewelling"
-                    },
-                    "profilePictureSet": {
-                        "title": "profilePictureSet",
-                        "description": "Has the user set a profile picture other then the default one?",
-                        "type": "boolean",
-                        "example": false
-                    },
-                    "mastodon": {
-                        "title": "mastodon",
-                        "description": "Mastodon URL of user",
-                        "type": "string",
-                        "example": "https://chaos.social/@traewelling"
-                    },
-                    "mastodonVisibility": {
-                        "$ref": "#/components/schemas/VisibilityEnum"
-                    }
-                },
-                "type": "object",
-                "xml": {
-                    "name": "UserProfileSettings"
-                }
-            },
             "Webhook": {
                 "title": "Webhook",
                 "description": "Webhook model",
@@ -5740,21 +6393,21 @@
                         "title": "ID",
                         "description": "ID",
                         "type": "integer",
-                        "format": "int64",
+                        "format": "int",
                         "example": 12345
                     },
                     "clientId": {
                         "title": "ClientID",
                         "description": "ID of the client which created this webhook",
                         "type": "integer",
-                        "format": "int64",
+                        "format": "int",
                         "example": 12345
                     },
                     "userId": {
                         "title": "UserID",
                         "description": "ID of the user which created this webhook",
                         "type": "integer",
-                        "format": "int64",
+                        "format": "int",
                         "example": 12345
                     },
                     "url": {
@@ -5792,10 +6445,10 @@
                         "nullable": true
                     },
                     "business": {
-                        "$ref": "#/components/schemas/BusinessEnum"
+                        "$ref": "#/components/schemas/Business"
                     },
                     "visibility": {
-                        "$ref": "#/components/schemas/VisibilityEnum"
+                        "$ref": "#/components/schemas/StatusVisibility"
                     },
                     "eventId": {
                         "description": "The ID of the event this status is related to - or null",
@@ -5830,99 +6483,6 @@
                 "xml": {
                     "name": "StatusUpdateBody"
                 }
-            },
-            "BusinessEnum": {
-                "title": "Business",
-                "description": "What type of travel (0=private, 1=business, 2=commute) did the user specify?",
-                "type": "integer",
-                "enum": [
-                    0,
-                    1,
-                    2
-                ],
-                "example": 0
-            },
-            "MapProviderEnum": {
-                "title": "MapProvider",
-                "description": "What type of map provider (cargo, open-railway-map) did the user specify?",
-                "type": "string",
-                "enum": [
-                    "cargo",
-                    "open-railway-map"
-                ],
-                "example": "cargo"
-            },
-            "MastodonVisibilityEnum": {
-                "title": "visibility",
-                "description": "What type of visibility (0=public, 1=unlisted, 2=followers, 3=private) did the user specify for\n *     future posts to Mastodon? Some instances such as chaos.social discourage bot posts on public timelines.",
-                "type": "integer",
-                "enum": [
-                    0,
-                    1,
-                    2,
-                    3
-                ],
-                "example": 1
-            },
-            "PointsReasonEnum": {
-                "title": "PointsReason",
-                "description": "What is the reason for the points calculation factor? (0=in time => 100%, 1=good enough => 25%, 2=not sufficient (1 point), 3=forced => no points)",
-                "type": "integer",
-                "enum": [
-                    0,
-                    1,
-                    2,
-                    3
-                ],
-                "example": 1
-            },
-            "TrainCategoryEnum": {
-                "title": "category",
-                "description": "Category of transport. ",
-                "type": "string",
-                "enum": [
-                    "nationalExpress",
-                    "national",
-                    "regionalExp",
-                    "regional",
-                    "suburban",
-                    "bus",
-                    "ferry",
-                    "subway",
-                    "tram",
-                    "taxi"
-                ],
-                "example": "suburban"
-            },
-            "TravelTypeEnum": {
-                "title": "travelType",
-                "type": "string",
-                "enum": [
-                    "express",
-                    "regional",
-                    "suburban",
-                    "bus",
-                    "ferry",
-                    "subway",
-                    "tram",
-                    "taxi",
-                    "tram",
-                    "taxi"
-                ],
-                "example": "suburban"
-            },
-            "VisibilityEnum": {
-                "title": "visibility",
-                "description": "What type of visibility (0=public, 1=unlisted, 2=followers, 3=private, 4=authenticated) did the\n *     user specify?",
-                "type": "integer",
-                "enum": [
-                    0,
-                    1,
-                    2,
-                    3,
-                    4
-                ],
-                "example": 0
             }
         },
         "parameters": {
@@ -6040,6 +6600,10 @@
         {
             "name": "Webhooks",
             "description": "Manage Webhooks for third party applications"
+        },
+        {
+            "name": "Report",
+            "description": "Report a Status, Event or User to the admins"
         }
     ]
 }

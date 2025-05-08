@@ -64,7 +64,7 @@
                                 </tbody>
                             </table>
                         </div>
-                        {{$stations->links()}}
+                        {{$stations->appends(request()->query())->links()}}
 
                         <script>
                             // not beautiful, but works ;)
@@ -103,11 +103,11 @@
                             <label for="create-station-name" class="form-label">Name</label>
                         </div>
                         <div class="mb-3 form-floating">
-                            <input type="text" class="form-control" id="create-station-ibnr" required>
+                            <input type="text" class="form-control" id="create-station-ibnr">
                             <label for="create-station-ibnr" class="form-label">IBNR</label>
                         </div>
                         <div class="mb-3 form-floating">
-                            <input type="text" class="form-control" id="create-station-rilIdentifier" required>
+                            <input type="text" class="form-control" id="create-station-rilIdentifier">
                             <label for="create-station-rilIdentifier" class="form-label">RilIdentifier</label>
                         </div>
                         <div class="row mb-3">
@@ -210,6 +210,23 @@
                             });
                         });
                     </script>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h2 class="fs-5">Import from Wikidata</h2>
+
+                    <form method="POST" action="{{route('backend.status.import.wikidata')}}">
+                        @csrf
+                        <div class="form-floating">
+                            <input type="text" class="form-control" id="input-import-wikidata-entity" required
+                                   name="qId">
+                            <label for="input-import-wikidata-entity" class="form-label">Wikidata ID</label>
+                        </div>
+                        <br/>
+                        <button type="submit" class="btn btn-primary">Import</button>
+                    </form>
                 </div>
             </div>
         </div>

@@ -14,40 +14,20 @@ return [
     |
     */
 
-    'mailgun' => [
-        'domain'   => env('MAILGUN_DOMAIN'),
-        'secret'   => env('MAILGUN_SECRET'),
-        'endpoint' => env('MAILGUN_ENDPOINT', 'api.mailgun.net'),
-    ],
-
-    'postmark' => [
-        'token' => env('POSTMARK_TOKEN'),
-    ],
-
-    'ses' => [
-        'key'    => env('AWS_ACCESS_KEY_ID'),
-        'secret' => env('AWS_SECRET_ACCESS_KEY'),
-        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
-    ],
-
-    'sparkpost' => [
-        'secret' => env('SPARKPOST_SECRET'),
-    ],
-
-    'stripe' => [
-        'model'   => App\User::class,
-        'key'     => env('STRIPE_KEY'),
-        'secret'  => env('STRIPE_SECRET'),
-        'webhook' => [
-            'secret'    => env('STRIPE_WEBHOOK_SECRET'),
-            'tolerance' => env('STRIPE_WEBHOOK_TOLERANCE', 300),
-        ],
-    ],
-
     'mastodon' => [
         'domain'        => env('MASTODON_DOMAIN'),
+        'client_name'   => env('MASTODON_APPNAME'), // TODO: check if this is a required value...? I don't think, we need this. ~@kris
         'client_id'     => env('MASTODON_ID'),
         'client_secret' => env('MASTODON_SECRET'),
-        'redirect'      => env('MASTODON_REDIRECT'),
+        'redirect'      => env('MASTODON_REDIRECT', 'http://localhost:8000/callback/mastodon'),
+        'timeout'       => env('MASTODON_TIMEOUT_SECONDS', 2),
     ],
+
+    'telegram' => [
+        'admin' => [
+            'active'  => env('TELEGRAM_ADMIN_ACTIVE', false),
+            'chat_id' => env('TELEGRAM_ADMIN_CHAT_ID'),
+            'token'   => env('TELEGRAM_ADMIN_TOKEN'),
+        ]
+    ]
 ];

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\API\v1;
 
-
 use App\Exceptions\UserAlreadyBlockedException;
 use App\Exceptions\UserAlreadyMutedException;
 use App\Exceptions\UserNotBlockedException;
@@ -159,7 +158,7 @@ class UserController extends Controller
      *          description="successful operation",
      *          @OA\JsonContent(
      *              @OA\Property(property="data",
-     *                      ref="#/components/schemas/User"
+     *                      ref="#/components/schemas/UserResource"
      *              ),
      *          )
      *       ),
@@ -203,7 +202,7 @@ class UserController extends Controller
      *              @OA\Property(
      *                  property="userId",
      *                  title="userId",
-     *                  format="int64",
+     *                  format="int",
      *                  description="ID of the to-be-blocked user",
      *                  example=1
      *              )
@@ -213,7 +212,7 @@ class UserController extends Controller
      *          response=201,
      *          description="successful operation",
      *          @OA\JsonContent(
-     *              @OA\Property(property="data", ref="#/components/schemas/User")
+     *              @OA\Property(property="data", ref="#/components/schemas/UserResource")
      *          )
      *       ),
      *       @OA\Response(response=400, description="Bad request"),
@@ -267,7 +266,7 @@ class UserController extends Controller
      *              @OA\Property(
      *                  property="userId",
      *                  title="userId",
-     *                  format="int64",
+     *                  format="int",
      *                  description="ID of the to-be-unblocked user",
      *                  example=1
      *              )
@@ -277,7 +276,7 @@ class UserController extends Controller
      *          response=200,
      *          description="successful operation",
      *          @OA\JsonContent(
-     *              @OA\Property(property="data", ref="#/components/schemas/User")
+     *              @OA\Property(property="data", ref="#/components/schemas/UserResource")
      *          )
      *       ),
      *       @OA\Response(response=400, description="Bad request"),
@@ -336,7 +335,7 @@ class UserController extends Controller
      *          response=201,
      *          description="successful operation",
      *          @OA\JsonContent(
-     *              @OA\Property(property="data", ref="#/components/schemas/User")
+     *              @OA\Property(property="data", ref="#/components/schemas/UserResource")
      *          )
      *       ),
      *       @OA\Response(response=400, description="Bad request"),
@@ -394,7 +393,7 @@ class UserController extends Controller
      *          response=200,
      *          description="successful operation",
      *          @OA\JsonContent(
-     *              @OA\Property(property="data", ref="#/components/schemas/User")
+     *              @OA\Property(property="data", ref="#/components/schemas/UserResource")
      *          )
      *       ),
      *       @OA\Response(response=400, description="Bad request"),
@@ -435,7 +434,7 @@ class UserController extends Controller
 
     /**
      * @OA\Get(
-     *      path="/user/search/{query}",
+     *      path="/user/search/{?query}",
      *      operationId="searchUsers",
      *      tags={"User"},
      *      summary="Get paginated statuses for single user",
@@ -443,7 +442,7 @@ class UserController extends Controller
      *      @OA\Parameter (
      *           name="query",
      *           in="path",
-     *           description="username",
+     *           description="If this is given, the search will be performed on the username and (display)name (or-search)",
      *           example="Gertrud123",
      *      ),
      *      @OA\Parameter (
@@ -453,13 +452,23 @@ class UserController extends Controller
      *          in="query",
      *          @OA\Schema(type="integer")
      *      ),
+     *      @OA\Parameter (
+     *          name="username",
+     *          in="query",
+     *          description="Search for parts username",
+     *      ),
+     *      @OA\Parameter (
+     *          name="name",
+     *          in="query",
+     *          description="Search for parts of users (display)name",
+     *      ),
      *      @OA\Response(
      *          response=200,
      *          description="successful operation",
      *          @OA\JsonContent(
      *              @OA\Property(property="data", type="array",
      *                  @OA\Items(
-     *                      ref="#/components/schemas/User"
+     *                      ref="#/components/schemas/UserResource"
      *                  )
      *              ),
      *              @OA\Property(property="links", ref="#/components/schemas/Links"),
@@ -473,9 +482,33 @@ class UserController extends Controller
      *     )
      *
      */
-    public function search(string $query): AnonymousResourceCollection|JsonResponse {
+    public function search(Request $request, ?string $query = null): AnonymousResourceCollection|JsonResponse {
         try {
-            return UserResource::collection(BackendUserBackend::searchUser($query));
+            $validated = $request->validate([
+                                                'username' => ['nullable', 'string', 'max:255'],
+                                                'name'     => ['nullable', 'string', 'max:255'],
+                                            ]);
+            if (empty($validated) && isset($query)) {
+                // if no specific search criteria is given, search for the query in username and display_name
+                return UserResource::collection(BackendUserBackend::searchUser($query));
+            }
+
+            if (empty($validated)) {
+                return response()->json(null, 400);
+            }
+
+            $users = User::query();
+
+            if (isset($validated['username'])) {
+                $users->where('username', 'like', "%{$validated['username']}%");
+            }
+
+            if (isset($validated['name'])) {
+                $users->where('name', 'like', "%{$validated['name']}%");
+            }
+
+            return UserResource::collection($users->simplePaginate(10));
+
         } catch (InvalidArgumentException) {
             return $this->sendError(['message' => __('messages.exception.general')], 400);
         }

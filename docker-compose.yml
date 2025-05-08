@@ -69,7 +69,7 @@ services:
       - ./avatars:/var/www/html/public/uploads/avatars
 
   database:
-    image: mariadb:10
+    image: mariadb:11
     restart: 'always'
     ports:
       - "3306:3306"
@@ -81,17 +81,6 @@ services:
       - TZ=Europe/Berlin
     env_file:
       - .env.docker
-
-  db-rest:
-    # we are stuck on db-rest version 5,
-    image: derhuerst/db-rest:5
-    restart: always
-    depends_on:
-      - redis
-    environment:
-      REDIS_URL: "redis://redis:6379"
-    networks:
-      - internal
 
   redis:
     image: redis

@@ -11,7 +11,6 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
 use Revolution\Mastodon\Facades\Mastodon;
 use Tests\FeatureTestCase;
 
@@ -26,30 +25,6 @@ class MastodonControllerTest extends FeatureTestCase
     const TOOTID_ANSWER_2 = "1339";
     const TOOTID_ANSWER_3 = "1340";
     const OP_CONTEXT_URL  = '/statuses/' . self::TOOTID_OP . '/context';
-
-    /**
-     * @dataProvider providerTestFormatDomain
-     */
-    public function testFormatDomain($case, $expected): void {
-        $formatted = MastodonController::formatDomain($case);
-        $this->assertEquals($expected, $formatted);
-
-        $validated = Validator::make(['domain' => $formatted], ['domain' => ['active_url']]);
-
-        $this->assertFalse($validated->fails());
-    }
-
-    public static function providerTestFormatDomain(): array {
-        return [
-            ['https://uelfte.club', 'https://uelfte.club'],
-            ['http://uelfte.club', 'https://uelfte.club'],
-            ['uelfte.club', 'https://uelfte.club'],
-            ['great_username@uelfte.club', 'https://uelfte.club'],
-            ['@great_username@uelfte.club', 'https://uelfte.club'],
-            ['https://mastodon.sergal.org', 'https://mastodon.sergal.org'] # see issue 1182
-        ];
-    }
-
 
     public function testFindEndOfChainIfThereAreNoAnswers(): void {
         $user = $this->setupUserWithMastodonAccount();

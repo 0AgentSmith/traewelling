@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Backend\Social;
 
-
 use App\Helpers\CacheKey;
 use App\Models\MastodonServer;
 use App\Models\User;
@@ -10,6 +9,7 @@ use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Revolution\Mastodon\Facades\Mastodon;
+use TypeError;
 
 class MastodonProfileDetails
 {
@@ -54,14 +54,20 @@ class MastodonProfileDetails
                                        options: MastodonController::getRequestOptions()
                                    );
                 }
-            } catch (Exception $exception) {
+            } catch (Exception|TypeError $exception) {
                 // The connection might be broken, or the instance is down, or $user has removed the api rights
                 // but has not told us yet.
-                Log::warning("Unable to fetch mastodon information for user#{$this->user->id} for Mastodon-Server '
-                . {$mastodonServer->domain}' and mastodon_id#{$this->user->socialProfile->mastodon_id}");
+                Log::warning(
+                    sprintf(
+                        "Unable to fetch mastodon information for user#%d for Mastodon-Server '%s' and mastodon_id#%d",
+                        $this->user->id,
+                        $mastodonServer?->domain ?? "unknown",
+                        $this->user->socialProfile->mastodon_id
+                    )
+                );
                 if (in_array($exception->getCode(), [401, 404, 410])) {
                     $this->removeMastodonInformation();
-                } else {
+                } elseif (config('logging.level') === 'debug') {
                     report($exception);
                 }
             }

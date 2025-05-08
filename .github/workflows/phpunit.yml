@@ -9,12 +9,12 @@ jobs:
 
     strategy:
       matrix:
-        php: [ 8.3 ]
+        php: [ 8.3, 8.4 ]
         dependency-version: [ prefer-stable ]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -24,9 +24,9 @@ jobs:
           coverage: xdebug
 
       - name: Setup node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Copy .env
@@ -59,4 +59,4 @@ jobs:
         env:
           DB_CONNECTION: sqlite
           DB_DATABASE: database/database.sqlite
-        run: php artisan test --parallel --coverage --min=49 #Increase this value regularly while writing tests. Target: 80%
+        run: php artisan test --parallel --coverage

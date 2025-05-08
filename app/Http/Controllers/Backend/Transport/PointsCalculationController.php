@@ -26,8 +26,12 @@ abstract class PointsCalculationController extends Controller
         Carbon          $arrival,
         TripSource      $tripSource,
         bool            $forceCheckin = false,
-        Carbon          $timestampOfView = null
+        ?Carbon         $timestampOfView = null
     ): PointCalculation {
+        if (auth()->user()?->points_enabled === false) {
+            return self::returnZeroPoints();
+        }
+
         if ($timestampOfView == null) {
             $timestampOfView = now();
         }
@@ -59,6 +63,16 @@ abstract class PointsCalculationController extends Controller
         );
     }
 
+    private static function returnZeroPoints(): PointCalculation {
+        return new PointCalculation(
+            points:         0,
+            basePoints:     0,
+            distancePoints: 0,
+            reason:         PointReason::POINTS_DISABLED,
+            factor:         0,
+        );
+    }
+
     public static function getPointsByReason(PointReason $pointReason, int $points, float $factor): int {
         if (in_array($pointReason, self::REDUCED_POINTS)) {
             return $pointReason === PointReason::MANUAL_TRIP ? 0 : 1;
@@ -85,11 +99,11 @@ abstract class PointsCalculationController extends Controller
         TripSource $tripSource,
         Carbon     $timestampOfView
     ): PointReason {
-        if ($forceCheckin) {
-            return PointReason::FORCED;
-        }
         if ($tripSource === TripSource::USER) {
             return PointReason::MANUAL_TRIP;
+        }
+        if ($forceCheckin) {
+            return PointReason::FORCED;
         }
 
         /**

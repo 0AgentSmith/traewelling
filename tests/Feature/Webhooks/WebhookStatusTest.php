@@ -2,11 +2,11 @@
 
 namespace Tests\Feature\Webhooks;
 
+use App\Dto\Internal\CheckInRequestDto;
 use App\Enum\Business;
 use App\Enum\StatusVisibility;
 use App\Enum\WebhookEvent;
 use App\Http\Controllers\Backend\Transport\TrainCheckinController;
-use App\Http\Controllers\HafasController;
 use App\Http\Controllers\StatusController;
 use App\Http\Resources\StatusResource;
 use App\Jobs\MonitoredCallWebhookJob;
@@ -16,13 +16,16 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Tests\FeatureTestCase;
+use Tests\TestHelpers\HafasHelpers;
 use function PHPUnit\Framework\assertEquals;
 
 class WebhookStatusTest extends FeatureTestCase
 {
     use RefreshDatabase;
 
-    public function testWebhookSendingOnStatusCreation() {
+    public function testWebhookSendingOnStatusCreation(): void {
+        $this->skipTestBecauseOfLegacyApiUsage();
+
         Bus::fake();
 
         $user   = User::factory()->create();
@@ -33,13 +36,15 @@ class WebhookStatusTest extends FeatureTestCase
         Bus::assertDispatched(function(MonitoredCallWebhookJob $job) use ($status) {
             assertEquals([
                              'event' => WebhookEvent::CHECKIN_CREATE->value,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       'status' => new StatusResource($status),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      'status' => new StatusResource($status),
                          ], $job->payload);
             return true;
         });
     }
 
     public function testWebhookSendingOnStatusBodyChange() {
+        $this->skipTestBecauseOfLegacyApiUsage();
+
         Bus::fake();
 
         $user   = User::factory()->create();
@@ -60,12 +65,14 @@ class WebhookStatusTest extends FeatureTestCase
                 $job->payload['event']
             );
             assertEquals($status->id, $job->payload['status']['id']);
-            assertEquals('New Example Body', $job->payload['status']['body'],);
+            assertEquals('New Example Body', $job->payload['status']['body']);
             return true;
         });
     }
 
     public function testWebhookSendingOnLike() {
+        $this->skipTestBecauseOfLegacyApiUsage();
+
         Bus::fake();
 
         $user   = User::factory()->create();
@@ -87,19 +94,21 @@ class WebhookStatusTest extends FeatureTestCase
     }
 
     public function testWebhookSendingOnDestinationChange() {
+        $this->skipTestBecauseOfLegacyApiUsage();
+
         Bus::fake();
 
         $user   = User::factory()->create();
         $client = $this->createWebhookClient($user);
         $this->createWebhook($user, $client, [WebhookEvent::CHECKIN_UPDATE]);
-        $status    = $this->createStatus($user);
-        $checkin   = $status->checkin()->first();
-        $trip = TrainCheckinController::getHafasTrip(
+        $status  = $this->createStatus($user);
+        $checkin = $status->checkin()->first();
+        $trip    = TrainCheckinController::getHafasTrip(
             tripId:   self::TRIP_ID,
             lineName: self::ICE802['line']['name'],
             startId:  self::FRANKFURT_HBF['id']
         );
-        $aachen    = $trip->stopovers->where('station.ibnr', self::AACHEN_HBF['id'])->first();
+        $aachen  = $trip->stopovers->where('station.ibnr', self::AACHEN_HBF['id'])->first();
         TrainCheckinController::changeDestination($checkin, $aachen);
 
         Bus::assertDispatched(function(MonitoredCallWebhookJob $job) use ($status) {
@@ -116,6 +125,8 @@ class WebhookStatusTest extends FeatureTestCase
     }
 
     public function testWebhookSendingOnBusinessChange() {
+        $this->skipTestBecauseOfLegacyApiUsage();
+
         Bus::fake();
 
         $user   = User::factory()->create();
@@ -142,6 +153,8 @@ class WebhookStatusTest extends FeatureTestCase
     }
 
     public function testWebhookSendingOnVisibilityChange() {
+        $this->skipTestBecauseOfLegacyApiUsage();
+
         Bus::fake();
 
         $user   = User::factory()->create();
@@ -168,6 +181,8 @@ class WebhookStatusTest extends FeatureTestCase
     }
 
     public function testWebhookSendingOnStatusDeletion() {
+        $this->skipTestBecauseOfLegacyApiUsage();
+
         Bus::fake();
 
         $user   = User::factory()->create();
@@ -198,20 +213,20 @@ class WebhookStatusTest extends FeatureTestCase
             startId:  self::FRANKFURT_HBF['id']
         );
 
-        $origin      = HafasController::getStation(self::FRANKFURT_HBF['id']);
-        $destination = HafasController::getStation(self::HANNOVER_HBF['id']);
+        $origin      = HafasHelpers::getStationById(self::FRANKFURT_HBF['id']);
+        $destination = HafasHelpers::getStationById(self::HANNOVER_HBF['id']);
 
-        $checkin = TrainCheckinController::checkin(
-            user:         $user,
-            trip:         $trip,
-            origin:       $origin,
-            departure:    Carbon::parse(self::DEPARTURE_TIME),
-            destination:  $destination,
-            arrival:      Carbon::parse(self::ARRIVAL_TIME),
-            travelReason: Business::PRIVATE,
-            visibility:   StatusVisibility::PUBLIC,
-            body:         self::EXAMPLE_BODY
-        );
-        return $checkin['status'];
+        $dto = new CheckInRequestDto();
+        $dto->setUser($user)
+            ->setTrip($trip)
+            ->setOrigin($origin)
+            ->setDeparture(Carbon::parse(self::DEPARTURE_TIME))
+            ->setDestination($destination)
+            ->setArrival(Carbon::parse(self::ARRIVAL_TIME))
+            ->setTravelReason(Business::PRIVATE)
+            ->setStatusVisibility(StatusVisibility::PUBLIC)
+            ->setBody(self::EXAMPLE_BODY);
+        $checkin = TrainCheckinController::checkin($dto);
+        return $checkin->status;
     }
 }

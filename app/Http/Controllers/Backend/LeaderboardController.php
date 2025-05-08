@@ -15,11 +15,15 @@ abstract class LeaderboardController extends Controller
 {
     public static function getLeaderboard(
         string $orderBy = 'points',
-        Carbon $since = null,
-        Carbon $until = null,
+        ?Carbon $since = null,
+        ?Carbon $until = null,
         int    $limit = 20,
         bool   $onlyFollowings = false
     ): Collection {
+        if (auth()->user()?->points_enabled === false) {
+            return collect();
+        }
+
         if ($since == null) {
             $since = now()->subWeek();
         }
@@ -79,6 +83,11 @@ abstract class LeaderboardController extends Controller
     }
 
     public static function getMonthlyLeaderboard(Carbon $date): Collection {
+        if (auth()->user()?->points_enabled === false) {
+            return collect();
+        }
+
+
         $data = DB::table('statuses')
                   ->join('train_checkins', 'train_checkins.status_id', '=', 'statuses.id')
                   ->join('users', 'statuses.user_id', '=', 'users.id')
@@ -121,11 +130,13 @@ abstract class LeaderboardController extends Controller
     }
 
     private static function getDurationSelector(): string {
-        if (config('database.default') === 'mysql') {
+        $driver = config('database.default');
+
+        if ($driver === 'mysql' || $driver === 'mariadb') {
             return 'SUM(TIMESTAMPDIFF(MINUTE, train_checkins.departure, train_checkins.arrival))';
         }
 
-        if (config('database.default') === 'sqlite') {
+        if ($driver === 'sqlite') {
             // Sorry for this disgusting code. But we test with SQLite.
             // There are different functions than with MySQL/MariaDB.
             return 'SUM((JULIANDAY(train_checkins.arrival) - JULIANDAY(train_checkins.departure)) * 1440)';

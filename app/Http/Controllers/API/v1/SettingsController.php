@@ -2,17 +2,14 @@
 
 namespace App\Http\Controllers\API\v1;
 
-use App\Enum\MapProvider;
-use App\Enum\MastodonVisibility;
-use App\Enum\StatusVisibility;
 use App\Exceptions\RateLimitExceededException;
 use App\Http\Controllers\Backend\SettingsController as BackendSettingsController;
+use App\Http\Requests\UpdateProfileInformationRequest;
 use App\Http\Resources\UserProfileSettingsResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\ValidationException;
 
 class SettingsController extends Controller
@@ -20,6 +17,7 @@ class SettingsController extends Controller
     /**
      * @OA\Get(
      *     path="/settings/profile",
+     *     operationId="getProfileSettings",
      *     tags={"Settings"},
      *     summary="Get the current user's profile settings",
      *     description="Get the current user's profile settings",
@@ -27,7 +25,7 @@ class SettingsController extends Controller
      *          response=200,
      *          description="Success",
      *          @OA\JsonContent(
-     *              @OA\Property(property="data", type="object", ref="#/components/schemas/UserProfileSettings")
+     *              @OA\Property(property="data", type="object", ref="#/components/schemas/UserProfileSettingsResource")
      *          )
      *     ),
      *     @OA\Response(response=401, description="Unauthorized"),
@@ -57,6 +55,40 @@ class SettingsController extends Controller
 
         try {
             return new UserProfileSettingsResource(BackendSettingsController::updateSettings($validated));
+        } catch (RateLimitExceededException) {
+            return $this->sendError(error: __('email.verification.too-many-requests'), code: 400);
+        }
+    }
+
+    /**
+     * @OA\Put(
+     *     path="/settings/profile",
+     *     operationId="updateProfileSettings",
+     *     tags={"Settings"},
+     *     summary="Update the current user's profile settings",
+     *     description="Update the current user's profile settings",
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(ref="#/components/schemas/UpdateProfileInformationRequest")
+     *    ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Success",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="data", type="object", ref="#/components/schemas/UserProfileSettingsResource")
+     *         )
+     *     ),
+     *     @OA\Response(response=401, description="Unauthorized"),
+     *     @OA\Response(response=422, description="Unprocessable Entity"),
+     *     @OA\Response(response=400, description="Bad Request"),
+     *     security={
+     *          {"passport": {"write-settings"}}, {"token": {}}
+     *     }
+     *     )
+     */
+    public function updateSettings(UpdateProfileInformationRequest $request): UserProfileSettingsResource|JsonResponse {
+        try {
+            return new UserProfileSettingsResource(BackendSettingsController::updateSettings($request->validated()));
         } catch (RateLimitExceededException) {
             return $this->sendError(error: __('email.verification.too-many-requests'), code: 400);
         }
@@ -96,83 +128,6 @@ class SettingsController extends Controller
     }
 
     /**
-     * @OA\Put(
-     *     path="/settings/profile",
-     *     tags={"Settings"},
-     *     summary="Update the current user's profile settings",
-     *     description="Update the current user's profile settings",
-     *     @OA\RequestBody(
-     *         required=true,
-     *         @OA\JsonContent(
-     *             @OA\Property(property="username", type="string", example="gertrud123", maxLength=25),
-     *             @OA\Property(property="displayName", type="string", example="Gertrud", maxLength=50),
-     *             @OA\Property(property="privateProfile", type="boolean", example=false, nullable=true),
-     *             @OA\Property(property="preventIndex", type="boolean", example=false, nullable=true),
-     *             @OA\Property(property="privacyHideDays", type="integer", example=1, nullable=true),
-     *             @OA\Property(
-     *                  property="defaultStatusVisibility",
-     *                  type="integer",
-     *                  nullable=true,
-     *                  @OA\Schema(ref="#/components/schemas/VisibilityEnum")
-     *              ),
-     *              @OA\Property(
-     *                   property="mastodonVisibility",
-     *                   type="integer",
-     *                   nullable=true,
-     *                   @OA\Schema(ref="#/components/schemas/MastodonVisibilityEnum")
-     *               ),
-     *              @OA\Property(
-     *                   property="mapProvider",
-     *                   type="string",
-     *                   nullable=true,
-     *                   @OA\Schema(ref="#/components/schemas/MapProviderEnum")
-     *               )
-     *         )
-     *    ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="Success",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="data", type="object", ref="#/components/schemas/UserProfileSettings")
-     *         )
-     *     ),
-     *     @OA\Response(response=401, description="Unauthorized"),
-     *     @OA\Response(response=422, description="Unprocessable Entity"),
-     *     @OA\Response(response=400, description="Bad Request"),
-     *     security={
-     *          {"passport": {"write-settings"}}, {"token": {}}
-     *     }
-     *     )
-     */
-    public function updateSettings(Request $request): UserProfileSettingsResource|JsonResponse {
-        $validated = $request->validate([
-                                            'username'                => ['required',
-                                                                          'string',
-                                                                          'max:25',
-                                                                          'regex:/^[a-zA-Z0-9_]*$/'],
-                                            'displayName'             => ['required', 'string', 'max:50'],
-                                            'privateProfile'          => ['boolean', 'nullable'],
-                                            'preventIndex'            => ['boolean', 'nullable'],
-                                            'privacyHideDays'         => ['integer', 'nullable', 'gte:1'],
-                                            'defaultStatusVisibility' => [
-                                                'nullable',
-                                                new Enum(StatusVisibility::class),
-                                            ],
-                                            'mastodonVisibility'      => [
-                                                'nullable',
-                                                new Enum(MastodonVisibility::class),
-                                            ],
-                                            'mapProvider'             => ['nullable', new Enum(MapProvider::class)],
-                                        ]);
-
-        try {
-            return new UserProfileSettingsResource(BackendSettingsController::updateSettings($validated));
-        } catch (RateLimitExceededException) {
-            return $this->sendError(error: __('email.verification.too-many-requests'), code: 400);
-        }
-    }
-
-    /**
      * Undocumented and unofficial API Endpoint
      *
      * @return JsonResponse
@@ -193,6 +148,9 @@ class SettingsController extends Controller
      * @return JsonResponse
      */
     public function uploadProfilePicture(Request $request): JsonResponse {
+        if (auth()->user()->can('disallow-social-interaction')) {
+            return response()->json(null, 403);
+        }
         if (BackendSettingsController::updateProfilePicture($request->input('image'))) {
             return $this->sendResponse(['message' => __('settings.saved')]);
         }

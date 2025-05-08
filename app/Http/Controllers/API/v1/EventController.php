@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\API\v1;
 
 use App\Http\Controllers\Backend\EventController as EventBackend;
-use App\Http\Controllers\HafasController;
 use App\Http\Controllers\StatusController;
 use App\Http\Resources\EventDetailsResource;
 use App\Http\Resources\EventResource;
@@ -159,6 +158,7 @@ class EventController extends Controller
     /**
      * @OA\Get(
      *      path="/events",
+     *      operationId="getEvents",
      *      tags={"Events"},
      *      summary="[Auth optional] Show active or upcoming events for the given timestamp",
      *      description="Returns all active or upcoming events for the given timestamp. Default timestamp is now. If upcoming is set to true, all events ending after the timestamp are returned.",
@@ -249,7 +249,7 @@ class EventController extends Controller
                                         ]);
 
         if (isset($validated['nearestStation'])) {
-            $stations = HafasController::getStations($validated['nearestStation'], 1);
+            $stations = $this->dataProvider->getStations($validated['nearestStation'], 1);
             if (count($stations) === 0) {
                 return $this->sendError(error: __('events.request.station_not_found'), code: 400);
             }
@@ -270,20 +270,5 @@ class EventController extends Controller
             return $this->sendResponse(data: ['message' => __('events.request.success')], code: 201);
         }
         return $this->sendError(error: __('messages.exception.general'), code: 500);
-    }
-
-    /**
-     * @OA\Get(
-     *      path="/activeEvents",
-     *      tags={"Events"},
-     *      summary="DEPRECATED - USE /events - removed after 2024-08",
-     *      description="DEPRECATED - USE /events - removed after 2024-08",
-     *      @OA\Response(response=200, description="The events"),
-     * )
-     * @return AnonymousResourceCollection
-     * @deprecated Use /events instead - removed after 2024-08
-     */
-    public function activeEvents(): AnonymousResourceCollection {
-        return EventResource::collection(Event::forTimestamp(now())->get());
     }
 }

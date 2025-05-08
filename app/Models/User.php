@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use App\Enum\DataProvider;
 use App\Enum\MapProvider;
 use App\Enum\StatusVisibility;
+use App\Enum\User\FriendCheckinSetting;
 use App\Exceptions\RateLimitExceededException;
 use App\Http\Controllers\Backend\Social\MastodonProfileDetails;
 use App\Jobs\SendVerificationEmail;
+use App\Services\PersonalDataSelection\UserGdprDataService;
 use Carbon\Carbon;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -18,49 +21,96 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Passport\HasApiTokens;
 use Mastodon;
+use Spatie\Permission\Traits\HasPermissions;
 use Spatie\Permission\Traits\HasRoles;
+use Spatie\PersonalDataExport\ExportsPersonalData;
+use Spatie\PersonalDataExport\PersonalDataSelection;
 
 /**
- * @property int                id
- * @property string             username
- * @property string             name
- * @property string             avatar
- * @property string             email
- * @property Carbon             email_verified_at
- * @property string             password
- * @property int                home_id
- * @property Carbon             privacy_ack_at
- * @property integer            default_status_visibility
- * @property boolean            private_profile
- * @property boolean            prevent_index
- * @property boolean            likes_enabled
- * @property MapProvider        mapprovider
- * @property int                privacy_hide_days
- * @property string             language
- * @property Carbon             last_login
- * @property Status[]           $statuses
- * @property SocialLoginProfile socialProfile
+ * // properties
+ * @property int                  id
+ * @property string               username
+ * @property string               name
+ * @property string|null          bio
+ * @property string               avatar
+ * @property string               email
+ * @property Carbon               email_verified_at
+ * @property string               password
+ * @property int                  home_id
+ * @property Carbon               privacy_ack_at
+ * @property StatusVisibility     default_status_visibility
+ * @property boolean              private_profile
+ * @property boolean              prevent_index
+ * @property boolean              likes_enabled
+ * @property boolean              points_enabled
+ * @property MapProvider          mapprovider
+ * @property string               data_provider
+ * @property string               timezone
+ * @property FriendCheckinSetting friend_checkin
+ * @property int                  privacy_hide_days
+ * @property string               language
+ * @property Carbon               last_login
+ * @property string               mastodonUrl
+ * @property ?Carbon              recent_gdpr_export
+ * @property Carbon               created_at
+ * @property Carbon               updated_at
  *
- * @todo replace "role" with an explicit permission system - e.g. spatie/laravel-permission
- * @todo replace "experimental" also with an explicit permission system - user can add self to "experimental" group
+ * // appends
+ * @property-read boolean         following
+ * @property-read boolean         followPending
+ * @property-read boolean         muted
+ * @property-read boolean         isAuthUserBlocked
+ * @property-read boolean         isBlockedByAuthUser
+ * @property-read bool            followedBy
+ * @property-read int             train_distance
+ * @property-read int             train_duration
+ * @property-read boolean         userInvisibleToMe
+ * @property-read int             points
+ * @property-read ?string         mastodon_url
+ *
+ * // relationships
+ * @property Collection           trainCheckins
+ * @property SocialLoginProfile   socialProfile
+ * @property Station              home
+ * @property Collection           likes
+ * @property Collection           follows
+ * @property Collection           blockedUsers
+ * @property Collection           blockedByUsers
+ * @property Collection           mutedUsers
+ * @property Collection           followRequests
+ * @property Collection           userFollowers
+ * @property Collection           userFollowings
+ * @property Collection           sessions
+ * @property Collection           icsTokens
+ * @property Collection           webhooks
+ * @property Collection           notifications
+ * @property Collection           statuses
+ * @property Collection           trustedUsers
+ * @property Collection           trustedByUsers
+ * @property Collection           oAuthClients
+ * @property Collection           profileLinks
+ * @property Collection           roles
+ *
+ *
  * @todo rename home_id to home_station_id
  * @todo rename mapprovider to map_provider
- * @todo remove "twitterUrl" (Twitter isn't used by traewelling anymore)
  * @mixin Builder
  */
-class User extends Authenticatable implements MustVerifyEmail
+class User extends Authenticatable implements ExportsPersonalData
 {
 
-    use Notifiable, HasApiTokens, HasFactory, HasRoles;
+    use Notifiable, HasApiTokens, HasFactory, HasRoles, HasPermissions, MustVerifyEmail;
 
     protected $fillable = [
         'username', 'name', 'avatar', 'email', 'email_verified_at', 'password', 'home_id', 'privacy_ack_at',
-        'default_status_visibility', 'likes_enabled', 'private_profile', 'prevent_index', 'privacy_hide_days',
-        'language', 'last_login', 'mapprovider', 'timezone',
+        'default_status_visibility', 'likes_enabled', 'points_enabled', 'private_profile', 'prevent_index',
+        'privacy_hide_days', 'language', 'last_login', 'mapprovider', 'timezone', 'friend_checkin', 'data_provider', 'recent_gdpr_export',
+        'bio'
     ];
     protected $hidden   = [
         'password', 'remember_token', 'email', 'email_verified_at', 'privacy_ack_at',
@@ -77,19 +127,20 @@ class User extends Authenticatable implements MustVerifyEmail
         'home_id'                   => 'integer',
         'private_profile'           => 'boolean',
         'likes_enabled'             => 'boolean',
+        'points_enabled'            => 'boolean',
         'default_status_visibility' => StatusVisibility::class,
         'prevent_index'             => 'boolean',
         'privacy_hide_days'         => 'integer',
         'last_login'                => 'datetime',
         'mapprovider'               => MapProvider::class,
+        'data_provider'             => DataProvider::class,
+        'timezone'                  => 'string',
+        'friend_checkin'            => FriendCheckinSetting::class,
+        'recent_gdpr_export'        => 'datetime',
     ];
 
     public function getTrainDistanceAttribute(): float {
         return Checkin::where('user_id', $this->id)->sum('distance');
-    }
-
-    public function statuses(): HasMany {
-        return $this->hasMany(Status::class);
     }
 
     public function trainCheckins(): HasMany {
@@ -140,14 +191,14 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * @deprecated
+     * @deprecated use ->userFollowers instead to get the users directly
      */
     public function followers(): HasMany {
         return $this->hasMany(Follow::class, 'follow_id', 'id');
     }
 
     /**
-     * @deprecated
+     * @deprecated use ->userFollowing instead to get the users directly
      */
     public function followings(): HasMany {
         return $this->hasMany(Follow::class, 'user_id', 'id');
@@ -172,18 +223,32 @@ class User extends Authenticatable implements MustVerifyEmail
                       ->sum('points');
     }
 
-    /**
-     * @untested
-     * @todo test
-     */
+    public function statuses(): HasMany {
+        return $this->hasMany(Status::class);
+    }
+
+    public function trustedUsers(): HasMany {
+        return $this->hasMany(TrustedUser::class, 'user_id', 'id')
+                    ->with(['trusted'])
+                    ->where(function($query) {
+                        $query->whereNull('expires_at')
+                              ->orWhere('expires_at', '>', now());
+                    });
+    }
+
+    public function trustedByUsers(): HasMany {
+        return $this->hasMany(TrustedUser::class, 'trusted_id', 'id')
+                    ->with(['user'])
+                    ->where(function($query) {
+                        $query->whereNull('expires_at')
+                              ->orWhere('expires_at', '>', now());
+                    });
+    }
+
     public function userFollowings(): BelongsToMany {
         return $this->belongsToMany(__CLASS__, 'follows', 'user_id', 'follow_id');
     }
 
-    /**
-     * @untested
-     * @todo test
-     */
     public function userFollowers(): BelongsToMany {
         return $this->belongsToMany(__CLASS__, 'follows', 'follow_id', 'user_id');
     }
@@ -214,6 +279,10 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function getMutedAttribute(): bool {
         return auth()->check() && auth()->user()->mutedUsers->contains('id', $this->id);
+    }
+
+    public function getFollowedByAttribute(): bool {
+        return (auth()->check() && $this->followings->contains('follow_id', auth()->user()->id));
     }
 
     /**
@@ -283,5 +352,21 @@ class User extends Authenticatable implements MustVerifyEmail
 
     protected function getDefaultGuardName(): string {
         return 'web';
+    }
+
+    public function oAuthClients(): HasMany {
+        return $this->hasMany(OAuthClient::class, 'user_id', 'id');
+    }
+
+    public function selectPersonalData(PersonalDataSelection $personalDataSelection): void {
+        (new UserGdprDataService())->addUserPersonalData($personalDataSelection, $this);
+    }
+
+    public function personalDataExportName(): string {
+        return $this->username;
+    }
+
+    public function profileLinks(): HasMany {
+        return $this->hasMany(ProfileLink::class, 'user_id', 'id');
     }
 }

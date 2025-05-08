@@ -31,10 +31,25 @@ export default defineComponent({
             if (!when) {
                 return false;
             }
-            return DateTime.fromISO(when) < DateTime.now();
+            return DateTime.fromISO(when).plus({minutes: 1}) < DateTime.now();
         },
         cancelled(): boolean {
             return this.item.cancelled || false;
+        },
+        delayClass(): string {
+            if (this.item.delay === null) {
+                return '';
+            }
+
+            let color = 'text-success';
+
+            if (this.item.delay > 300) {
+                color = 'text-danger';
+            } else if (this.item.delay >= 60) {
+                color = 'text-warning';
+            }
+
+            return color;
         }
     },
 })
@@ -66,10 +81,10 @@ export default defineComponent({
                     <span class="text-muted text-decoration-line-through">
                         {{ formatTime(item.plannedWhen) }}<br>
                     </span>
-                    <span>{{ formatTime(item.when) }}</span>
+                    <span :class="delayClass">{{ formatTime(item.when) }}</span>
                 </div>
                 <div v-else>
-                    <span>{{ formatTime(item.plannedWhen) }}</span>
+                    <span :class="delayClass">{{ formatTime(item.plannedWhen) }}</span>
                 </div>
             </div>
         </div>
@@ -79,6 +94,7 @@ export default defineComponent({
 
 <style scoped lang="scss">
 @import "../../../sass/_variables.scss";
+
 .dep-card {
     min-height: 4.25rem;
 }

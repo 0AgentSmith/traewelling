@@ -3,6 +3,16 @@ declare(strict_types=1);
 
 namespace App\Enum;
 
+/**
+ * @OA\Schema(
+ *     title="category",
+ *     description="Category of transport. ",
+ *     type="string",
+ *     enum={"nationalExpress", "national", "regionalExp", "regional", "suburban", "bus", "ferry", "subway",
+ *     "tram", "taxi", "plane"},
+ *     example="suburban"
+ * )
+ */
 enum HafasTravelType: string
 {
     case NATIONAL_EXPRESS = 'nationalExpress';
@@ -15,18 +25,21 @@ enum HafasTravelType: string
     case SUBWAY           = 'subway';
     case TRAM             = 'tram';
     case TAXI             = 'taxi';
+    case PLANE            = 'plane';
 
     public function getEmoji(): string {
         return match ($this->value) {
-            'nationalExpress', 'national' => '🚄',
-            'regionalExp', 'regional'     => '🚆',
-            'suburban'                    => '🚋',
-            'bus'                         => '🚌',
-            'ferry'                       => '⛴',
-            'subway'                      => '🚇',
-            'tram'                        => '🚊',
-            'taxi'                        => '🚖',
-            default                       => '',
+            'nationalExpress'         => '🚄',
+            'regionalExp', 'national' => '🚆',
+            'regional'                => '🚞',
+            'suburban'                => '🚋',
+            'bus'                     => '🚌',
+            'ferry'                   => '⛴',
+            'subway'                  => '🚇',
+            'tram'                    => '🚊',
+            'taxi'                    => '🚖',
+            'plane'                   => '✈️',
+            default                   => '',
         };
     }
 

@@ -2,48 +2,25 @@
 
 namespace App\Http\Controllers\Backend\Transport;
 
-use App\Exceptions\HafasException;
+use App\DataProviders\DataProviderBuilder;
+use App\DataProviders\DataProviderInterface;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\HafasController;
 use App\Models\Checkin;
 use App\Models\Station;
 use App\Models\Stopover;
 use App\Models\User;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Repositories\StationRepository;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-abstract class StationController extends Controller
+class StationController extends Controller
 {
+    private DataProviderInterface $dataProvider;
+    private StationRepository     $stationRepository;
 
-    /**
-     * @throws HafasException
-     * @throws ModelNotFoundException
-     */
-    public static function lookupStation(string|int $query): Station {
-        //Lookup by station ibnr
-        if (is_numeric($query)) {
-            $station = Station::where('ibnr', $query)->first();
-            if ($station !== null) {
-                return $station;
-            }
-        }
-
-        //Lookup by ril identifier
-        if (!is_numeric($query) && strlen($query) <= 5 && ctype_upper($query)) {
-            $station = HafasController::getStationByRilIdentifier($query);
-            if ($station !== null) {
-                return $station;
-            }
-        }
-
-        //Lookup HAFAS
-        $station = HafasController::getStations(query: $query, results: 1)->first();
-        if ($station !== null) {
-            return $station;
-        }
-
-        throw new ModelNotFoundException;
+    public function __construct(?StationRepository $stationRepository = null) {
+        $this->dataProvider      = (new DataProviderBuilder())->build();
+        $this->stationRepository = $stationRepository ?? new StationRepository();
     }
 
     /**
@@ -59,15 +36,20 @@ abstract class StationController extends Controller
             'train_stations.id', 'train_stations.ibnr', 'train_stations.name',
             'train_stations.latitude', 'train_stations.longitude', 'train_stations.rilIdentifier',
         ];
-        return Station::join('train_checkins', 'train_checkins.destination', '=', 'train_stations.ibnr')
-                      ->where('train_checkins.user_id', $user->id)
-                      ->groupBy($groupAndSelect)
-                      ->select($groupAndSelect)
-                      ->orderByDesc(DB::raw('MAX(train_checkins.arrival)'))
-                      ->limit($maxCount)
-                      ->get();
+        return DB::table('train_checkins') //TODO: return Station objects
+                 ->join('train_stopovers', 'train_checkins.destination_stopover_id', '=', 'train_stopovers.id')
+                 ->join('train_stations', 'train_stopovers.train_station_id', '=', 'train_stations.id')
+                 ->where('train_checkins.user_id', $user->id)
+                 ->groupBy($groupAndSelect)
+                 ->select($groupAndSelect)
+                 ->orderByDesc(DB::raw('MAX(train_checkins.arrival)'))
+                 ->limit($maxCount)
+                 ->get();
     }
 
+    /**
+     * @deprecated
+     */
     public static function getAlternativeDestinationsForCheckin(Checkin $checkin): Collection {
         $encounteredOrigin = false;
         return $checkin->trip->stopovers
@@ -85,5 +67,28 @@ abstract class StationController extends Controller
                     'arrival_planned' => userTime($stopover->arrival_planned ?? $stopover->departure_planned),
                 ];
             });
+    }
+
+    public function search(string $search): Collection {
+        if (!is_numeric($search) && strlen($search) <= 5 && ctype_upper($search)) {
+            $stations = $this->stationRepository->getStationsByFuzzyRilIdentifier($search);
+            if ($stations->isNotEmpty()) {
+                return $stations;
+            }
+        } elseif (preg_match('/^Q\d+$/', $search)) {
+            return $this->stationRepository->getStationsByWikidataId($search);
+        }
+
+        $stations = $this->dataProvider->getStations($search);
+        if ($stations->count() < 10) {
+            $remaining  = 10 - $stations->count();
+            $dbStations = $this->stationRepository->getStationByName($search, 'de', true);
+            // remove duplicates
+            $dbStations = $dbStations->filter(function(Station $station) use ($stations) {
+                return !$stations->contains('id', $station->id);
+            });
+            $stations   = $stations->merge($dbStations->take($remaining));
+        }
+        return $stations;
     }
 }

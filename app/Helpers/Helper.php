@@ -7,9 +7,14 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
+ * BEFORE ADDING NEW FUNCTIONS TO THIS FILE, PLEASE CONSIDER CREATING A NEW SERVICE CLASS.
+ * And test it. 👉👈
+ */
+
+/**
  * @see https://stackoverflow.com/a/437642
  */
-function number($number, $decimals = 2) {
+function number($number, $decimals = 0) {
     return number_format(
         $number,
         $decimals,
@@ -25,13 +30,12 @@ function number($number, $decimals = 2) {
  *
  * @return array with `hours`, `minutes` and `showHours`.
  */
-function secondsToDuration($seconds): array {
-    $secondsInAnHour = 60 * 60;
-
+function secondsToDuration(int $seconds): array {
     return [
-        "hours"     => intdiv($seconds, $secondsInAnHour),
-        "minutes"   => intdiv($seconds % $secondsInAnHour, 60),
-        "showHours" => $seconds >= $secondsInAnHour
+        "years"   => intdiv($seconds, 3600 * 24 * 365),
+        "days"    => intdiv($seconds % (3600 * 24 * 365), 3600 * 24),
+        "hours"   => intdiv($seconds % (3600 * 24), 3600),
+        "minutes" => intdiv($seconds % 3600, 60),
     ];
 }
 
@@ -40,11 +44,19 @@ function secondsToDuration($seconds): array {
  *
  * @return string
  */
-function durationToSpan($duration): string {
+function durationToSpan(array $duration): string {
     $return = $duration["minutes"] . "<small>min</small>";
 
-    if ($duration["showHours"]) {
+    if ($duration["hours"] > 0 || $duration["days"] > 0 || $duration["years"] > 0) {
         $return = $duration["hours"] . "<small>h</small>&nbsp;" . $return;
+    }
+
+    if ($duration["days"] > 0 || $duration["years"] > 0) {
+        $return = $duration["days"] . "<small>d</small>&nbsp;" . $return;
+    }
+
+    if ($duration["years"] > 0) {
+        $return = $duration["years"] . "<small>y</small>&nbsp;" . $return;
     }
 
     return $return;
@@ -85,26 +97,5 @@ function errorMessage(Exception|Error $exception, ?string $text = null): array|n
         return $text;
     }
 
-    return $text . ' ' . __('messages.exception.reference', ['reference' => $exception->reference()]);
-}
-
-function isPrideMonth(): bool {
-    return Carbon::now()->month === 6;
-}
-
-function prideFlag(): string {
-    // only run in june
-    if (!isPrideMonth()) {
-        return '';
-    }
-    $rand = random_int(0, 100);
-
-    if ($rand < 70) {
-        return 'Gay text-pride';
-    }
-
-    $classes = ['BiPlus', 'Trans', 'NonBinary', 'Asexual', 'Pansexual', 'GayMale', 'Lesbian', 'Intersex', 'GenderFluid',
-                'Agender', ' Polyamorous', 'Omnisexual', 'Polysexual', 'AroAce', 'Genderqueer', 'Queer'];
-
-    return $classes[array_rand($classes)] . ' text-pride';
+    return $text . ' ' . __('messages.exception.reference', ['reference' => $exception->reference]);
 }

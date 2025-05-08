@@ -6,19 +6,23 @@ use App\Http\Controllers\Backend\Auth\AccessTokenController;
 use App\Http\Controllers\Backend\Auth\ApproveAuthorizationController;
 use App\Http\Controllers\Backend\Auth\AuthorizationController;
 use App\Models\Follow;
+use App\Models\Like;
 use App\Models\OAuthClient;
 use App\Models\Status;
 use App\Models\StatusTag;
 use App\Models\User;
 use App\Models\Webhook;
 use App\Policies\FollowPolicy;
+use App\Policies\LikePolicy;
 use App\Policies\StatusPolicy;
 use App\Policies\StatusTagPolicy;
+use App\Policies\TokenPolicy;
 use App\Policies\UserPolicy;
 use App\Policies\WebhookPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Passport;
+use Laravel\Passport\Token;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -31,8 +35,10 @@ class AuthServiceProvider extends ServiceProvider
         Status::class    => StatusPolicy::class,
         User::class      => UserPolicy::class,
         Follow::class    => FollowPolicy::class,
+        Like::class      => LikePolicy::class,
         Webhook::class   => WebhookPolicy::class,
-        StatusTag::class => StatusTagPolicy::class
+        StatusTag::class => StatusTagPolicy::class,
+        Token::class     => TokenPolicy::class,
     ];
 
     //ToDo Translate
@@ -72,16 +78,16 @@ class AuthServiceProvider extends ServiceProvider
         Passport::useClientModel(OAuthClient::class);
 
         // Override passport routes
-        Route::group(['prefix' => 'oauth', 'as' => 'oauth.'], function () {
+        Route::group(['prefix' => 'oauth', 'as' => 'oauth.'], function() {
             Route::get('authorize', [AuthorizationController::class, 'authorize'])
-                ->middleware(['web'])
-                ->name('authorizations.authorize');
+                 ->middleware(['web'])
+                 ->name('authorizations.authorize');
             Route::post('/authorize', [ApproveAuthorizationController::class, 'approve'])
-                ->middleware(['web'])
-                ->name('authorizations.approve');
+                 ->middleware(['web'])
+                 ->name('authorizations.approve');
             Route::post("/token", [AccessTokenController::class, 'issueToken'])
-                ->middleware("throttle")
-                ->name("authorizations.token");
+                 ->middleware("throttle")
+                 ->name("authorizations.token");
         });
         Passport::tokensCan(self::$scopes);
         Passport::setDefaultScope([

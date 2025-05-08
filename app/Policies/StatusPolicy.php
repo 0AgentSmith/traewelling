@@ -73,6 +73,17 @@ class StatusPolicy
         return Response::deny('Congratulations! You\'ve found an edge-case!');
     }
 
+    public function viewBody(?User $user, Status $status): Response|bool {
+        if($user?->id === $status->user_id) {
+            return Response::allow();
+        }
+        return !$status->hide_body && $this->view($user, $status);
+    }
+
+    public function create(User $user): bool {
+        return $user->cannot('disallow-status-creation');
+    }
+
     /**
      * Determine whether the user can update the model.
      *

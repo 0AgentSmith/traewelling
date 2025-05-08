@@ -6,7 +6,6 @@ use App\Dto\CheckinSuccess;
 use App\Enum\Business;
 use App\Enum\StatusVisibility;
 use App\Events\StatusUpdateEvent;
-use App\Exceptions\PermissionException;
 use App\Http\Controllers\Backend\Helper\StatusHelper;
 use App\Http\Controllers\Backend\Transport\TrainCheckinController;
 use App\Http\Controllers\Controller;
@@ -23,6 +22,9 @@ use Illuminate\Validation\Rules\Enum;
 class StatusController extends Controller
 {
 
+    /**
+     * @deprecated Use API endpoint instead
+     */
     public function updateStatus(Request $request): JsonResponse|RedirectResponse {
         $validated = $request->validate([
                                             'statusId'              => ['required', 'exists:statuses,id'],
@@ -37,20 +39,53 @@ class StatusController extends Controller
         try {
             $status = Status::findOrFail($validated['statusId']);
             $this->authorize('update', $status);
-            $status->update([
-                                'body'       => $validated['body'] ?? null,
-                                'business'   => Business::from($validated['business_check']),
-                                'visibility' => StatusVisibility::from($validated['checkinVisibility']),
-                            ]);
+
+            $newVisibility = StatusVisibility::from($validated['checkinVisibility']);
+
+            //Check for disallowed status visibility changes
+            if (auth()->user()->can('disallow-status-visibility-change') && $newVisibility != StatusVisibility::PRIVATE) {
+                return back()->with('error', 'You are not allowed to update non-private statuses. Please set the status to private.');
+            }
+
+            // check duration of manual arrival and departure
+            $arrivalDelay   = 0;
+            $departureDelay = 0;
+            if (isset($validated['manualDeparture'])) {
+                $manualDeparture = Carbon::parse($validated['manualDeparture'], auth()->user()->timezone);
+                $departureDelay  = abs($manualDeparture->diffInHours($status->checkin->departure));
+
+            }
+
+            if (isset($validated['manualArrival'])) {
+                $manualArrival = Carbon::parse($validated['manualArrival'], auth()->user()->timezone);
+                $arrivalDelay  = abs($manualArrival->diffInHours($status->checkin->arrival));
+            }
+
+            if ($departureDelay > config('trwl.max_delay_hours') || $arrivalDelay > config('trwl.max_delay_hours')) {
+                return back()->with('error', 'The delay of the manual arrival or departure is too high.');
+            }
+
+            $statusPayload = [
+                'body'       => $validated['body'] ?? null,
+                'business'   => Business::from($validated['business_check']),
+                'visibility' => $newVisibility,
+            ];
+
+            if ($status->lock_visibility) {
+                // If moderation has locked the visibility, prevent the user from changing it
+                unset($statusPayload['visibility']);
+            }
+
+            $status->update($statusPayload);
 
             $status->checkin->update([
-                                              'manual_departure' => isset($validated['manualDeparture']) ?
-                                                  Carbon::parse($validated['manualDeparture'], auth()->user()->timezone) :
-                                                  null,
-                                              'manual_arrival'   => isset($validated['manualArrival']) ?
-                                                  Carbon::parse($validated['manualArrival'], auth()->user()->timezone) :
-                                                  null,
-                                          ]);
+                                         'manual_departure' => isset($validated['manualDeparture']) ?
+                                             Carbon::parse($validated['manualDeparture'], auth()->user()->timezone) :
+                                             null,
+                                         'manual_arrival'   => isset($validated['manualArrival']) ?
+                                             Carbon::parse($validated['manualArrival'], auth()->user()->timezone) :
+                                             null,
+                                     ]);
 
             StatusUpdateEvent::dispatch($status->refresh());
 
@@ -82,7 +117,7 @@ class StatusController extends Controller
 
             return redirect()->route('status', ['id' => $status->id])
                              ->with('success', __('status.update.success'));
-        } catch (ModelNotFoundException|PermissionException) {
+        } catch (ModelNotFoundException) {
             return redirect()->back()->with('alert-danger', __('messages.exception.general'));
         } catch (AuthorizationException) {
             return redirect()->back()->with('alert-danger', __('error.status.not-authorized'));

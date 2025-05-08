@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\API\v1;
 
-use App\Exceptions\PermissionException;
+use App\Exceptions\RateLimitExceededException;
 use App\Exceptions\StatusAlreadyLikedException;
 use App\Http\Controllers\StatusController as StatusBackend;
 use App\Http\Resources\UserResource;
+use App\Models\Like;
 use App\Models\Status;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -37,7 +39,7 @@ class LikesController extends Controller
      *          @OA\JsonContent(
      *              @OA\Property(property="data", type="array",
      *                  @OA\Items(
-     *                      ref="#/components/schemas/User"
+     *                      ref="#/components/schemas/UserResource"
      *                  )
      *              ),
      *          )
@@ -93,6 +95,7 @@ class LikesController extends Controller
      *       @OA\Response(response=403, description="User not authorized to access this status"),
      *       @OA\Response(response=404, description="No status found for this id"),
      *       @OA\Response(response=409, description="Status already liked by user"),
+     *       @OA\Response(response=429, description="Rate limit exceeded"),
      *       security={
      *           {"passport": {"write-likes"}}, {"token": {}}
      *       }
@@ -104,6 +107,7 @@ class LikesController extends Controller
      */
     public function create(int $statusId): JsonResponse {
         try {
+            $this->authorize('create', Like::class);
             $status = Status::findOrFail($statusId);
             StatusBackend::createLike(Auth::user(), $status);
             return $this->sendResponse(
@@ -115,10 +119,16 @@ class LikesController extends Controller
                 error: __('controller.status.like-already'),
                 code:  409,
             );
-        } catch (PermissionException) {
+        } catch (AuthorizationException) {
             return $this->sendError(code: 403);
         } catch (ModelNotFoundException) {
             return $this->sendError(code: 404);
+        } catch (RateLimitExceededException $exception) {
+            return response()->json(null, 429, [
+                'X-RateLimit-Limit'     => $exception->limit,
+                'X-RateLimit-Remaining' => $exception->remaining,
+                'X-RateLimit-Reset'     => $exception->reset,
+            ]);
         }
     }
 

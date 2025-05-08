@@ -15,7 +15,13 @@ class DatabaseCleaner extends Command
         $this->call(Polylines::class);
         $this->call(PolylinesBrouter::class);
         $this->call(User::class);
+        $this->call(TrustedUser::class);
         $this->call(Trips::class);
+        $this->call(RefreshPrometheusCache::class);
+        $this->call(CleanUpDanglingStatuses::class);
+        $this->call(CleanUpActivity::class);
+        $this->call(CleanUpEventSuggestions::class);
+        $this->call(CleanUpTokens::class);
 
         $this->call('queue-monitor:purge', ['--beforeDays' => 7]);
         $this->call('activitylog:clean');

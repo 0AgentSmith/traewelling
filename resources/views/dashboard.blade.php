@@ -64,21 +64,18 @@
                     </div>
                 @endif
 
-                @if(auth()->user()->hasRole('open-beta'))
-                    <div id="station-board-new">
-                        <Stationautocomplete :dashboard="true" :show-gps-button="true"></Stationautocomplete>
-                    </div>
-                @else
-                    @include('includes.station-autocomplete')
-                @endif
+                <div id="station-board-new">
+                    <Apialerts></Apialerts>
+                    <Stationautocomplete :dashboard="true" :show-gps-button="true"></Stationautocomplete>
+                </div>
                 @if($future->count() >= 1)
                     <div class="accordion accordion-flush" id="accordionFutureCheckIns">
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="flush-headingOne">
                                 <button class="accordion-button collapsed"
                                         type="button"
-                                        data-mdb-toggle="collapse"
-                                        data-mdb-target="#future-check-ins"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#future-check-ins"
                                         aria-expanded="false"
                                         aria-controls="future-check-ins"
                                 >
@@ -88,9 +85,9 @@
                             <div id="future-check-ins"
                                  class="accordion-collapse collapse"
                                  aria-labelledby="flush-headingOne"
-                                 data-mdb-parent="#accordionFutureCheckIns"
+                                 data-bs-parent="#accordionFutureCheckIns"
                             >
-                                <div class="accordion-body">
+                                <div class="accordion-body px-0">
                                     @include('includes.statuses', ['statuses' => $future, 'showDates' => false])
                                 </div>
                             </div>
@@ -114,6 +111,22 @@
 
                 @include('includes.statuses', ['statuses' => $statuses, 'showDates' => true])
                 {{ $statuses->links() }}
+
+                @if($showGlobalButton)
+                    <div class="alert alert-info">
+                        <h4 class="alert-heading">
+                            <i class="fa-solid fa-binoculars"></i>
+                            {{ __('dashboard.empty') }}
+                        </h4>
+                        <p>{{ __('dashboard.empty.teaser') }}</p>
+                        <p>{{ __('dashboard.empty.discover1') }}
+                            <a href="{{route('statuses.active')}}">
+                                {{ __('menu.active') }}
+                            </a>
+                            {{ __('dashboard.empty.discover3') }}.
+                        </p>
+                    </div>
+                @endif
 
                 @include('includes.edit-modal')
                 @include('includes.delete-modal')

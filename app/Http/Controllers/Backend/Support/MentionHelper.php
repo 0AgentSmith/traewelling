@@ -16,7 +16,7 @@ class MentionHelper
     private Status  $status;
     private bool    $isCreating;
 
-    public function __construct(Status $status, string $body = null) {
+    public function __construct(Status $status, ?string $body = null) {
         $this->status = $status;
         $status->load('mentions', 'mentions.mentioned');
         $this->body       = $body ?? $status->body;
@@ -32,7 +32,7 @@ class MentionHelper
     /**
      * @return MentionDto[]
      */
-    private function findUsersInString(): array {
+    public function findUsersInString(): array {
         $users   = [];
         $matches = self::findMentionsInString($this->body ?? '');
         foreach ($matches as $match) {
@@ -46,7 +46,7 @@ class MentionHelper
         return $users;
     }
 
-    public static function createMentions(Status $status, string $string = null): void {
+    public static function createMentions(Status $status, ?string $string = null): void {
         $self = new self($status, $string);
         $self->parseAndCreate();
     }
@@ -91,6 +91,13 @@ class MentionHelper
     }
 
     private function sendNotification(Mention $mention): void {
+        if ($mention->mentioned->id === $this->status->user_id) {
+            return;
+        }
+        if ($mention->mentioned->cannot('view', $this->status)) {
+            return;
+        }
+
         $found = false;
         // only send notification if the user has not been mentioned before
         foreach ($this->status->mentions as $oldMention) {

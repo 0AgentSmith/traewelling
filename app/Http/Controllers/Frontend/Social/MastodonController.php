@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Frontend\Social;
 use App\Exceptions\SocialAuth\InvalidMastodonException;
 use App\Http\Controllers\Backend\Social\MastodonController as MastodonBackend;
 use App\Http\Controllers\Controller;
+use App\Services\MastodonDomainExtractionService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +26,7 @@ class MastodonController extends Controller
      * @throws ValidationException
      */
     public function redirect(Request $request): SympfonyRedirectResponse|RedirectResponse {
-        $domain    = MastodonBackend::formatDomain($request->input('domain') ?? '');
+        $domain    = (new MastodonDomainExtractionService)->formatDomain($request->input('domain') ?? '');
         $validator = Validator::make(['domain' => $domain], ['domain' => ['required', 'active_url']]);
         $validated = $validator->validate();
 
@@ -67,6 +68,10 @@ class MastodonController extends Controller
         config(['services.mastodon.domain' => $domain]);
         config(['services.mastodon.client_id' => $server->client_id]);
         config(['services.mastodon.client_secret' => $server->client_secret]);
+
+        if (request()->has('error')) {
+            return redirect()->route('login')->with('error', \request('error_description'));
+        }
 
         $socialiteUser = Socialite::driver(driver: 'mastodon')->user();
         $user          = MastodonBackend::getUserFromSocialite($socialiteUser, $server);

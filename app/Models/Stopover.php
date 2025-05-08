@@ -9,6 +9,28 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
+ * properties
+ * @property int         $id
+ * @property string      $trip_id
+ * @property int         $train_station_id
+ * @property UTCDateTime $arrival_planned
+ * @property UTCDateTime $arrival_real
+ * @property UTCDateTime $arrival
+ * @property string      $arrival_platform_planned
+ * @property string      $arrival_platform_real
+ * @property UTCDateTime $departure_planned
+ * @property UTCDateTime $departure_real
+ * @property UTCDateTime $departure
+ * @property string      $departure_platform_planned
+ * @property string      $departure_platform_real
+ * @property bool        $isArrivalDelayed
+ * @property bool        $isDepartureDelayed
+ * @property bool        $cancelled
+ *
+ * relations
+ * @property Trip        $trip
+ * @property Station     $station
+ *
  * @todo rename table to "Stopover" (without Train - we have more than just trains)
  * @todo rename "train_station_id" to "station_id" - we have more than just trains.
  * @todo rename "cancelled" to "is_cancelled" - or split into "is_arrival_cancelled" and "is_departure_cancelled"? need
@@ -41,7 +63,10 @@ class Stopover extends Model
         'departure_planned'          => UTCDateTime::class,
         'departure_real'             => UTCDateTime::class,
         'departure_platform_planned' => 'string',
-        'departure_platform_real'    => 'string'
+        'departure_platform_real'    => 'string',
+        'isArrivalDelayed'           => 'boolean',
+        'isDepartureDelayed'         => 'boolean',
+        'cancelled'                  => 'boolean',
     ];
 
     public function trip(): BelongsTo {
@@ -62,11 +87,11 @@ class Stopover extends Model
 
     // These two methods are a ticking time bomb and I hope we'll never see it explode. 💣
     public function getArrivalAttribute(): ?Carbon {
-        return ($this->arrival_real ?? $this->arrival_planned) ?? $this->departure;
+        return ($this->arrival_real ?? $this->arrival_planned) ?? $this?->departure;
     }
 
     public function getDepartureAttribute(): ?Carbon {
-        return ($this->departure_real ?? $this->departure_planned) ?? $this->arrival;
+        return ($this->departure_real ?? $this->departure_planned) ?? $this?->arrival;
     }
 
     public function getPlatformAttribute(): ?string {

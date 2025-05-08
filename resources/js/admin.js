@@ -1,19 +1,41 @@
 import "awesomplete/awesomplete";
 
+import "leaflet/dist/leaflet.js";
+import "./components/maps";
+import * as Popper from "@popperjs/core";
+import "bootstrap";
+import "leaflet";
+import {Notyf} from "notyf";
+
 window.addEventListener("load", () => {
     import("./components/station-autocomplete");
 });
 
-import * as Popper from "@popperjs/core";
 window.Popper = Popper;
 
-import "bootstrap";
-import "leaflet";
-import {createApp} from "vue";
-import TripCreationForm from "../vue/components/TripCreation/TripCreationForm.vue";
-
-document.addEventListener("DOMContentLoaded", function() {
-    const admin = createApp({});
-    admin.component("TripCreationForm", TripCreationForm);
-    admin.mount("#trip-creation-form");
+window.notyf = new Notyf({
+    duration: 5000,
+    position: {x: "right", y: window.innerWidth > 480 ? "top" : "bottom"},
+    dismissible: true,
+    ripple: true,
+    types: [
+        {
+            type: "info",
+            background: "#0dcaf0",
+            icon: {
+                className: "fa-solid fa-circle-info",
+                color: "white",
+                tagName: "i",
+            },
+        },
+        {
+            type: "warning",
+            background: "#ffc107",
+            icon: {
+                className: "fa-solid fa-triangle-exclamation",
+                tagName: "i",
+                color: "white",
+            },
+        },
+    ],
 });

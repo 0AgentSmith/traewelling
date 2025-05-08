@@ -1,11 +1,13 @@
 @extends('admin.layout')
+@php
+    /** @var \App\Models\Station $station */
+@endphp
 
 @section('title', 'Station - ' . $station->name)
 
 @section('content')
-
     <div class="row">
-        <div class="col-md-5">
+        <div class="col-md-6">
             <div class="card mb-3">
                 <div class="card-body">
                     <table class="table">
@@ -18,127 +20,282 @@
                             <td>{{ $station->name }}</td>
                         </tr>
                         <tr>
-                            <th>IBNR</th>
-                            <td>{{ $station->ibnr }}</td>
+                            <th>Timezone offset</th>
+                            <td>
+                                {{ $station->time_offset ?? 'null' }}
+                                <a class="float-end btn btn-sm btn-outline-primary"
+                                   onclick="resetTimeOffset({{$station->id}})"
+                                >
+                                    Reset Time Offset
+                                </a>
+                                <script>
+                                    function resetTimeOffset(stationId) {
+                                        fetch('/api/v1/stations/' + stationId, {
+                                            method: 'PUT',
+                                            body: JSON.stringify({time_offset: null}),
+                                            headers: {'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content}
+                                        }).then(function () {
+                                            location.reload();
+                                        })
+                                    }
+                                </script>
+                            </td>
                         </tr>
                         <tr>
-                            <th>IFOPT</th>
-                            <td>{{ $station->ifopt }}</td>
+                            <th>
+                                Identifier
+                            </th>
+                            <td>
+                                <table class="table table-bordered">
+                                    @if($station->wikidata_id)
+                                        <tr>
+                                            <td>wikidata</td>
+                                            <td>
+                                                <a href="https://www.wikidata.org/wiki/{{ $station->wikidata_id }}"
+                                                   target="{{ $station->wikidata_id }}">
+                                                    {{ $station->wikidata_id }}
+                                                </a>
+                                            </td>
+                                            <td></td>
+                                            <td></td>
+                                        </tr>
+                                    @endif
+
+                                    @if($station->ibnr)
+                                        <tr>
+                                            <td>legacy-hafas (ibnr)</td>
+                                            <td>
+                                                <a href="https://reiseauskunft.bahn.de/bin/bhftafel.exe/en?input={{ $station->ibnr ?? '' }}&boardType=dep&time=actual&productsDefault=1111101&start=yes"
+                                                   target="{{ $station->ibnr ?? '' }}"
+                                                >
+                                                    {{ $station->ibnr }}
+                                                </a>
+                                            </td>
+                                            <td></td>
+                                            <td></td>
+                                        </tr>
+                                    @endif
+
+                                    @if($station->ifopt)
+                                        <tr>
+                                            <td>ifopt</td>
+                                            <td>
+                                                <a href="https://transmodel-ids.toolforge.org/ifopt/{{ urlencode($station->ifopt) }}"
+                                                   target="{{ $station->ifopt }}">
+                                                    {{ $station->ifopt }}
+                                                </a>
+                                            </td>
+                                            <td></td>
+                                            <td></td>
+                                        </tr>
+                                    @endif
+
+                                    @if($station->rilIdentifier)
+                                        <tr>
+                                            <td>ril</td>
+                                            <td>
+                                                <a href="https://iris.noncd.db.de/wbt/js/index.html?bhf={{ $station->rilIdentifier ?? '' }}&zeilen=50&seclang=en"
+                                                   target="{{ $station->rilIdentifier ?? '' }}"
+                                                >
+                                                    {{ $station->rilIdentifier }}
+                                                </a>
+                                            </td>
+                                            <td></td>
+                                            <td></td>
+                                        </tr>
+                                    @endif
+
+                                    @foreach($station->stationIdentifiers as $identifier)
+                                        <tr>
+                                            <td>{{ $identifier->type }}</td>
+                                            <td>
+                                                <a href="{{$identifier->getRawTransitousApiLinkToDepartures()}}"
+                                                   target="_blank">
+                                                    {{ $identifier->identifier }}
+                                                </a>
+                                            </td>
+                                            <td>{{ $identifier->name }}</td>
+                                            <td>{{ $identifier->origin }}</td>
+                                        </tr>
+                                    @endforeach
+                                </table>
+                            </td>
                         </tr>
+                        <tr>
+                            <th>
+                                <a href="https://www.wikidata.org/wiki/Property:P2561"
+                                   target="P2561">
+                                    Names
+                                </a>
+                            </th>
+                            <td>
+                                <table class="table table-bordered">
+                                    @foreach($station->names as $name)
+                                        <tr>
+                                            <td>{{ $name->language }}</td>
+                                            <td>{{ $name->name }}</td>
+                                        </tr>
+                                    @endforeach
+                                </table>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Created at</th>
+                            <td>
+                                {{ $station->created_at?->toIso8601String() }}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card mb-3">
+                <div class="card-body" style="padding: 0;">
+                    <div id="map" style="height: 300px;"></div>
+                </div>
+                <script>
+                    document.addEventListener('DOMContentLoaded', function () {
+                        const map = L.map('map').setView([{{ $station->latitude }}, {{ $station->longitude }}], 13);
+                        setTilingLayer('open-railway-map', map);
+
+                        const iconHtml = '<i class="fas fa-map-marker-alt fa-2x" style="color: red;"></i>';
+                        const customIcon = L.divIcon({
+                            html: iconHtml,
+                            className: '',
+                            iconSize: [30, 30],
+                            iconAnchor: [15, 15]
+                        });
+
+                        L.marker([{{ $station->latitude }}, {{ $station->longitude }}], {icon: customIcon}).addTo(map)
+                            .bindPopup('{{ $station->name }}')
+                            .openPopup();
+                    });
+                </script>
+            </div>
+
+
+            @isset($station->ifopt_a)
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h2 class="fs-4">Stations with same Ifopt</h2>
+
+                        <table class="table table-striped table-hover">
+                            @foreach($stationsWithSameIfopt as $stationWithSameIfopt)
+                                <tr>
+                                    <td>
+                                        {{ $stationWithSameIfopt->id }}
+                                    </td>
+                                    <td>
+                                        <a href="{{ route('admin.station', ['id' => $stationWithSameIfopt->id]) }}">
+                                            {{ $stationWithSameIfopt->name }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        {{ $stationWithSameIfopt->distanceToSimilarStation }}m
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </table>
+                    </div>
+                </div>
+            @endisset
+
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h2 class="fs-4">Nearby Stations</h2>
+
+                    <table class="table table-striped table-hover">
+                        <tbody>
+                        @foreach($nearbyStations as $nearbyStation)
+                            <tr>
+                                <td>
+                                    [{{ $nearbyStation->id }}]
+                                    <a href="{{ route('admin.station', ['id' => $nearbyStation->id]) }}">
+                                        {{ $nearbyStation->name }}
+                                    </a>
+                                    <br>
+                                    <small>
+                                        ({{ number_format($nearbyStation->distance, 3, ',', '.') }} km)
+                                    </small>
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-info"
+                                            onclick="mergeStations({{ $station->id }}, {{ $nearbyStation->id }})"
+                                            title="Merge {{ $station->id }} into {{ $nearbyStation->id }}"
+                                    >
+                                        {{ $station->id }} → {{ $nearbyStation->id }}
+                                    </button>
+                                    <br>
+                                    <button class="btn btn-sm btn-outline-info"
+                                            onclick="mergeStations({{ $nearbyStation->id }}, {{ $station->id }})"
+                                    >
+                                        {{ $nearbyStation->id }} → {{ $station->id }}
+                                    </button>
+                                </td>
+                            </tr>
+                        @endforeach
+                        </tbody>
                     </table>
                 </div>
             </div>
 
             <div class="card mb-3">
                 <div class="card-body">
-                    <h2 class="fs-4">Wikidata</h2>
+                    <h2 class="fs-4">Latest checkins</h2>
 
-                    @isset($station->wikidataEntity)
-
-                        <table class="table">
+                    <table class="table table-striped table-hover">
+                        <tbody>
+                        @foreach($latestCheckins as $checkin)
                             <tr>
-                                <th>Wikidata ID</th>
                                 <td>
-                                    <a href="https://www.wikidata.org/wiki/{{ $station->wikidata_id }}"
-                                       target="{{ $station->wikidata_id }}"
-                                    >
-                                        {{ $station->wikidata_id }}
+                                    <a href="{{ route('admin.status.edit', ['statusId' => $checkin->status_id]) }}">
+                                        {{ $checkin->id }}
                                     </a>
                                 </td>
-                            </tr>
-                            <tr>
-                                <th>Labels</th>
                                 <td>
-                                    @foreach($station->wikidataEntity->data['labels'] ?? [] as $language => $label)
-                                        <i>{{$language}}</i>: {{$label}}<br/>
-                                    @endforeach
+                                    <a href="/admin/users/{{$checkin->user->id}}">
+                                        {{ $checkin->user->name }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a href="/admin/stations/{{$checkin->originStopover->station->id}}">
+                                        {{ $checkin->originStopover->station->name }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <a href="/admin/stations/{{$checkin->destinationStopover->station->id}}">
+                                        {{ $checkin->destinationStopover->station->name }}
+                                    </a>
+                                </td>
+                                <td>
+                                    {{ $checkin->created_at?->diffForHumans() }}
                                 </td>
                             </tr>
-                            <tr>
-                                <th>IBNR</th>
-                                <td>
-                                    @foreach($station->wikidataEntity->data['statements'][\App\Enum\Wikidata\Property::IBNR->value] ?? [] as $statement)
-                                        <a href="https://reiseauskunft.bahn.de/bin/bhftafel.exe/en?input={{ $statement['value']['content'] ?? '' }}&boardType=dep&time=actual&productsDefault=1111101&start=yes"
-                                           target="{{ $statement['value']['content'] ?? '' }}"
-                                        >
-                                            {{ $statement['value']['content'] ?? '' }}
-                                        </a>
-                                    @endforeach
-                                </td>
-                            </tr>
-                            <tr>
-                                <th>IFOPT</th>
-                                <td>
-                                    @foreach($station->wikidataEntity->data['statements'][\App\Enum\Wikidata\Property::IFOPT->value] ?? [] as $statement)
-                                        <a href="https://www.fahrplanauskunft-mv.de/vmvsl3plus/departureMonitor?formik=origin%3D{{ urlencode($statement['value']['content'] ?? '') }}&lng=en"
-                                           target="{{ $statement['value']['content'] ?? '' }}"
-                                        >
-                                            {{ $statement['value']['content'] ?? '' }}
-                                        </a>
-                                    @endforeach
-                                </td>
-                            </tr>
-                            <tr>
-                                <th>Ril100</th>
-                                <td>
-                                    @foreach($station->wikidataEntity->data['statements'][\App\Enum\Wikidata\Property::DEUTSCHE_BAHN_STATION_CODE->value] ?? [] as $statement)
-                                        <a href="https://iris.noncd.db.de/wbt/js/index.html?bhf={{ $statement['value']['content'] ?? '' }}&zeilen=50&seclang=en"
-                                           target="{{ $statement['value']['content'] ?? '' }}"
-                                        >
-                                            {{ $statement['value']['content'] ?? '' }}
-                                        </a>
-                                    @endforeach
-                                </td>
-                            </tr>
-                            <tr>
-                                <th>Last fetched</th>
-                                <td>
-                                    {{ $station->wikidataEntity->last_updated_at?->format('Y-m-d H:i:s') ?? 'never' }}
-                                </td>
-                            </tr>
-                        </table>
-                    @else
-                        <span class="fw-bold text-danger">No Wikidata entity for this station linked.</span>
-                        <hr/>
-                        <form class="wikidata-link">
-                            <input type="hidden" name="id" value="{{$station->id}}"/>
-                            <div class="form-floating">
-                                <input type="text" class="form-control" name="wikidata_id"
-                                       placeholder="Link Wikidata ID">
-                                <label for="wikidata_id">Link Wikidata ID</label>
-                            </div>
-                        </form>
-                        <script>
-                            document.querySelector('form.wikidata-link').addEventListener('submit', function (event) {
-                                event.preventDefault();
-
-                                const id         = document.querySelector('form.wikidata-link input[name="id"]').value;
-                                const wikidataId = document.querySelector('form.wikidata-link input[name="wikidata_id"]').value;
-
-                                fetch('/api/v1/station/' + id, {
-                                    method: 'PUT',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                                    },
-                                    body: JSON.stringify({
-                                        wikidata_id: wikidataId
-                                    })
-                                })
-                                    .then(response => response.json())
-                                    .then(data => {
-                                        if (data.data) {
-                                            window.location.reload();
-                                        } else {
-                                            alert('Error linking Wikidata ID');
-                                        }
-                                    });
-                            });
-                        </script>
-                    @endisset
+                        @endforeach
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
+
+    <script>
+        function mergeStations(oldStationId, newStationId) {
+            fetch('/api/v1/station/' + oldStationId + '/merge/' + newStationId, {
+                method: 'PUT',
+            }).then(response => {
+                if (response.status === 200) {
+                    notyf.success('Stations merged successfully');
+                    location.href = '/admin/stations/' + newStationId;
+                    return;
+                }
+                response.json().then(data => {
+                    notyf.error(data.message ?? 'Something went wrong. Please try again later.');
+                });
+            });
+        }
+    </script>
 
 @endsection

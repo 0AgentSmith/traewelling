@@ -2,8 +2,9 @@
 
 namespace App\Exceptions;
 
-use Exception;
-
+/**
+ * @deprecated Use Laravel's built-in AuthorizationException instead.
+ */
 class PermissionException extends Referencable
 {
     //

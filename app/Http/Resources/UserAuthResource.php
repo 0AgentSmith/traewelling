@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Http\Controllers\Backend\User\ProfilePictureController;
+use App\Models\User;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
@@ -28,6 +29,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class UserAuthResource extends JsonResource
 {
     public function toArray($request): array {
+        $pointsEnabled = $request->user()?->points_enabled ?? true;
+        /** @var User $this */
         return [
             'id'                      => (int) $this->id,
             'displayName'             => (string) $this->name,
@@ -37,7 +40,7 @@ class UserAuthResource extends JsonResource
             'totalDistance'           => (float) $this->train_distance,
             'trainDuration'           => (int) $this->train_duration, // @deprecated: remove after 2024-08
             'totalDuration'           => (int) $this->train_duration,
-            'points'                  => (int) $this->points,
+            'points'                  => (int) $pointsEnabled ? $this->points : 0,
             'mastodonUrl'             => $this->mastodonUrl ?? null,
             'privateProfile'          => (bool) $this->private_profile,
             'preventIndex'            => $this->prevent_index,

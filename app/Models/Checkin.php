@@ -16,42 +16,39 @@ use stdClass;
 
 /**
  * //properties
- * @property int         $id
- * @property int         $status_id
- * @property int         $user_id
- * @property string      $trip_id
- * @property int         $origin      @deprecated -> use origin_stopover instead
- * @property int         $origin_stopover_id
- * @property int         $destination @deprecated -> use destination_stopover instead
- * @property int         $destination_stopover_id
- * @property int         $distance
- * @property int         $duration
- * @property UTCDateTime $departure   @deprecated -> use origin_stopover instead
- * @property UTCDateTime $manual_departure
- * @property UTCDateTime $arrival     @deprecated -> use destination_stopover instead
- * @property UTCDateTime $manual_arrival
- * @property int         $points
- * @property bool        $forced
+ * @property int                $id
+ * @property int                $status_id
+ * @property int                $user_id
+ * @property string             $trip_id
+ * @property int                $origin_stopover_id
+ * @property int                $destination_stopover_id
+ * @property int                $distance
+ * @property int                $duration
+ * @property UTCDateTime        $departure   @deprecated -> use origin_stopover instead
+ * @property UTCDateTime        $manual_departure
+ * @property UTCDateTime        $arrival     @deprecated -> use destination_stopover instead
+ * @property UTCDateTime        $manual_arrival
+ * @property int                $points
+ * @property bool               $forced
  *
  * //relations
- * @property Trip        $trip
- * @property Status      $status
- * @property User        $user
- * @property Station     $originStation
- * @property Stopover    $originStopover
- * @property Station     $destinationStation
- * @property Stopover    $destinationStopover
+ * @property Trip               $trip
+ * @property Status             $status
+ * @property User               $user
+ * @property Stopover           $originStopover
+ * @property Stopover           $destinationStopover
  *
  * //appends
- * @property float       $speed
- * @property stdClass    $displayDeparture
- * @property stdClass    $displayArrival
+ * @property float              $speed
+ * @property stdClass           $displayDeparture
+ * @property stdClass           $displayArrival
+ * @property Collection<Status> $alsoOnThisConnection
  *
  * @todo rename table to "Checkin" (without Train - we have more than just trains)
  * @todo merge model with "Status" because the difference between trip sources (HAFAS,
  *        User, and future sources) should be handled in the Trip model.
  * @todo use the `id` from trips, instead of the hafas trip id - this is duplicated data
- * @todo drop the `origin`, `destination`, `departure` and `arrival` columns and use the stopover instead
+ * @todo drop the `departure` and `arrival` columns and use the stopover instead
  */
 class Checkin extends Model
 {
@@ -60,8 +57,10 @@ class Checkin extends Model
 
     protected $table    = 'train_checkins';
     protected $fillable = [
-        'status_id', 'user_id', 'trip_id', 'origin', 'origin_stopover_id', 'destination', 'destination_stopover_id',
-        'distance', 'duration', 'departure', 'manual_departure', 'arrival', 'manual_arrival', 'points', 'forced',
+        'status_id', 'user_id', 'trip_id', 'origin_stopover_id', 'destination_stopover_id',
+        'distance', 'duration', 'manual_departure', 'manual_arrival', 'points', 'forced',
+
+        'departure', 'arrival' //TODO: -> use {origin/destination}_stopover->{arrival/departure} instead
     ];
     protected $hidden   = ['created_at', 'updated_at'];
     protected $appends  = ['speed', 'displayDeparture', 'displayArrival'];
@@ -69,9 +68,7 @@ class Checkin extends Model
         'id'                      => 'integer',
         'status_id'               => 'integer',
         'user_id'                 => 'integer',
-        'origin'                  => 'integer', //@deprecated -> use origin_stopover_id instead
         'origin_stopover_id'      => 'integer',
-        'destination'             => 'integer', //@deprecated -> use destination_stopover_id instead
         'destination_stopover_id' => 'integer',
         'distance'                => 'integer',
         'duration'                => 'integer',
@@ -89,14 +86,6 @@ class Checkin extends Model
 
     public function user(): BelongsTo {
         return $this->belongsTo(User::class, 'user_id', 'id');
-    }
-
-    public function originStation(): HasOne {
-        return $this->hasOne(Station::class, 'ibnr', 'origin');
-    }
-
-    public function destinationStation(): HasOne {
-        return $this->hasOne(Station::class, 'ibnr', 'destination');
     }
 
     public function trip(): HasOne {
@@ -171,7 +160,7 @@ class Checkin extends Model
     }
 
     /**
-     * @return Collection
+     * @return Collection<Status>
      * @todo Sichtbarkeit der CheckIns prüfen! Hier werden auch Private CheckIns angezeigt
      */
     public function getAlsoOnThisConnectionAttribute(): Collection {

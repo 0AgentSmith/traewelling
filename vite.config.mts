@@ -1,19 +1,20 @@
 import laravel from "laravel-vite-plugin";
 import vue from "@vitejs/plugin-vue";
 import i18n from 'laravel-vue-i18n/vite';
-import { defineConfig } from "vite";
+import {defineConfig} from "vite";
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
     plugins: [
+        tailwindcss(),
         laravel({
             input: [
                 "resources/js/app.js",
-                "resources/js/stats.js",
                 "resources/sass/app.scss",
                 "resources/sass/app-dark.scss",
                 "resources/js/admin.js",
                 "resources/sass/admin.scss",
-                "resources/sass/welcome.scss",
+                "resources/css/welcome.css",
             ],
             refresh: true,
         }),

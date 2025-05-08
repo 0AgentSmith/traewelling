@@ -1,8 +1,12 @@
 @php
     use App\Enum\Business;
+    use App\Enum\HafasTravelType;
+    use App\Http\Controllers\Backend\Helper\StatusHelper;
     use App\Http\Controllers\Backend\Transport\StationController;
-    use App\Http\Controllers\Backend\User\ProfilePictureController;
+    use App\Http\Controllers\Backend\Transport\StatusController;
+    use App\Http\Controllers\Backend\User\ProfilePictureController;use Illuminate\Support\Facades\Gate;
 @endphp
+@php /** @var App\Models\Status $status */ @endphp
 <div class="card status mb-3" id="status-{{ $status->id }}"
      data-trwl-id="{{$status->id}}"
      data-date="{{userTime($status->checkin->departure, __('dateformat.with-weekday'))}}"
@@ -53,25 +57,36 @@
                             </small>
                             &nbsp;
                         @endisset
-                        <span data-mdb-toggle="tooltip" title="{{$display_departure->type->getTooltip()}}">
+                        <span data-bs-toggle="tooltip" title="{{$display_departure->type->getTooltip()}}">
                             {{ userTime($display_departure->time) }}
                         </span>
                     </span>
 
-                    <a href="{{route('trains.stationboard', ['stationId' => $status->checkin->originStation->id ])}}"
+                    <a href="{{route('stationboard', [
+                        'stationId' => $status->checkin->originStopover->station->id,
+                        'stationName' => $status->checkin->originStopover->station->name,
+                    ])}}"
                        class="text-trwl clearfix">
-                        {{$status->checkin->originStation->name}}
+                        @if(auth()->user()?->hasRole('open-beta'))
+                            {{$status->checkin->originStopover->station->localized_name}}
+                        @else
+                            {{$status->checkin->originStopover->station->name}}
+                        @endif
                     </a>
 
-                    <p class="train-status text-muted">
+                    <p class="train-status text-muted m-0">
                         <span>
-                            @if (file_exists(public_path('img/' . $status->checkin->trip->category->value . '.svg')))
+                            @if(file_exists(public_path('img/' . $status->checkin->trip->category->value . '.svg')))
                                 <img class="product-icon"
                                      src="{{ asset('img/' . $status->checkin->trip->category->value . '.svg') }}"
                                      alt="{{$status->checkin->trip->category->value}}"
                                 />
-                            @elseif($status->checkin->trip->category->value == 'taxi')
+                            @elseif($status->checkin->trip->category === HafasTravelType::PLANE)
+                                <i class="fa fa-plane d-inline" aria-hidden="true"></i>
+                            @elseif($status->checkin->trip->category === HafasTravelType::TAXI)
                                 <i class="fa fa-taxi d-inline" aria-hidden="true"></i>
+                            @elseif($status->checkin->trip->category === HafasTravelType::FERRY)
+                                <i class="fa fa-ship d-inline" aria-hidden="true"></i>
                             @else
                                 <i class="fa fa-train d-inline" aria-hidden="true"></i>
                             @endif
@@ -96,8 +111,8 @@
                         @if($status->business !== Business::PRIVATE)
                             <span class="pl-sm-2">
                                 <i class="fa {{$status->business->faIcon()}}"
-                                   data-mdb-toggle="tooltip"
-                                   data-mdb-placement="top"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="top"
                                    title="{{$status->business->title()}}"
                                    aria-hidden="true">
                                 </i>
@@ -115,22 +130,52 @@
                         @endif
                     </p>
 
-                    @if(!empty($status->body))
-                        <p class="status-body"><i class="fas fa-quote-right" aria-hidden="true"></i>
-                            {!! \App\Http\Controllers\Backend\Transport\StatusController::getPrintableEscapedBody($status) !!}
+                    @if(auth()->check() && auth()->id() === $status->user_id)
+                        @if($status->moderation_notes)
+                            <p class="text-warning font-italic m-0">
+                                <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+                                {{ $status->moderation_notes }}
+                            </p>
+                        @endif
+
+                        @if($status->lock_visibility)
+                            <p class="text-warning font-italic m-0">
+                                <i class="fas fa-lock" aria-hidden="true"></i>
+                                {{ __('status.locked-visibility') }}
+                            </p>
+                        @endif
+
+                        @if($status->hide_body)
+                            <p class="text-warning font-italic m-0">
+                                <i class="fas fa-eye-slash" aria-hidden="true"></i>
+                                {{ __('status.hidden-body') }}
+                            </p>
+                        @endif
+                    @endif
+
+                    @if(!empty($status->body) && Gate::allows('viewBody', $status))
+                        <p class="status-body mt-2"><i class="fas fa-quote-right" aria-hidden="true"></i>
+                            {!! StatusController::getPrintableEscapedBody($status) !!}
                         </p>
                     @endif
 
                     @if($status->checkin->departure->isPast() && $status->checkin->arrival->isFuture())
-                        <p class="text-muted font-italic">
+                        <p class="text-muted font-italic mt-2">
                             {{ __('stationboard.next-stop') }}
 
                             @php
-                                $nextStation = \App\Http\Controllers\Backend\Transport\StatusController::getNextStationForStatus($status);
+                                $nextStation = StatusController::getNextStationForStatus($status);
                             @endphp
-                            <a href="{{route('trains.stationboard', ['stationId' => $nextStation?->id])}}"
+                            <a href="{{route('stationboard', [
+                                'stationId' => $nextStation?->id,
+                                'stationName' => $nextStation?->name
+                            ])}}"
                                class="text-trwl clearfix">
-                                {{$nextStation?->name}}
+                                @if(auth()->user()?->hasRole('open-beta'))
+                                    {{$nextStation?->localized_name}}
+                                @else
+                                    {{$nextStation?->name}}
+                                @endif
                             </a>
                         </p>
                     @endif
@@ -145,13 +190,20 @@
                             </small>
                             &nbsp;
                         @endisset
-                        <span data-mdb-toggle="tooltip" title="{{$display_arrival->type->getTooltip()}}">
+                        <span data-bs-toggle="tooltip" title="{{$display_arrival->type->getTooltip()}}">
                             {{ userTime($display_arrival->time) }}
                         </span>
                     </span>
-                    <a href="{{route('trains.stationboard', ['stationId' => $status->checkin->destinationStation->id])}}"
+                    <a href="{{route('stationboard', [
+                        'stationId' => $status->checkin->destinationStopover->station->id,
+                        'stationName' => $status->checkin->destinationStopover->station->name
+                    ])}}"
                        class="text-trwl clearfix">
-                        {{$status->checkin->destinationStation->name}}
+                        @if(auth()->user()?->hasRole('open-beta'))
+                            {{$status->checkin->destinationStopover->station->localized_name}}
+                        @else
+                            {{$status->checkin->destinationStopover->station->name}}
+                        @endif
                     </a>
                 </li>
             </ul>
@@ -184,12 +236,12 @@
             <li class="like-text list-inline-item">
                 <i class="fas {{$status->visibility->faIcon()}} visibility-icon text-small"
                    aria-hidden="true" title="{{$status->visibility->title()}}"
-                   data-mdb-toggle="tooltip"
-                   data-mdb-placement="top"></i>
+                   data-bs-toggle="tooltip"
+                   data-bs-placement="top"></i>
             </li>
             <li class="like-text list-inline-item">
                 <div class="dropdown">
-                    <a href="#" data-mdb-toggle="dropdown" aria-expanded="false">
+                    <a href="#" data-bs-toggle="dropdown" aria-expanded="false">
                         &nbsp;
                         <i class="fa fa-ellipsis-vertical" aria-hidden="true"></i>
                         &nbsp;
@@ -200,7 +252,7 @@
                                     type="button"
                                     data-trwl-share-url="{{ route('status', ['id' => $status->id]) }}"
                                     @if(auth()->user() && $status->user_id == auth()->user()->id)
-                                        data-trwl-share-text="{{ \App\Http\Controllers\Backend\Helper\StatusHelper::getSocialText($status) }}"
+                                        data-trwl-share-text="{{StatusHelper::getSocialText($status) }}"
                                     @else
                                         data-trwl-share-text="{{ $status->description }}"
                                 @endif
@@ -224,8 +276,8 @@
                                 </li>
                                 <li>
                                     <button class="dropdown-item delete" type="button"
-                                            data-mdb-toggle="modal"
-                                            data-mdb-target="#modal-status-delete"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modal-status-delete"
                                             onclick="document.querySelector('#modal-status-delete input[name=\'statusId\']').value = '{{$status->id}}';">
                                         <div class="dropdown-icon-suspense">
                                             <i class="fas fa-trash" aria-hidden="true"></i>
@@ -235,24 +287,31 @@
                                 </li>
                             @else
                                 <li>
-                                    <button type="button" class="dropdown-item join"
-                                            data-trwl-linename="{{$status->checkin->trip->linename}}"
-                                            data-trwl-stop-name="{{$status->checkin->destinationStation->name}}"
-                                            data-trwl-trip-id="{{$status->checkin->trip_id}}"
-                                            data-trwl-destination="{{$status->checkin->destination}}"
-                                            data-trwl-arrival="{{$status->checkin->arrival}}"
-                                            data-trwl-start="{{$status->checkin->origin}}"
-                                            data-trwl-departure="{{$status->checkin->departure}}"
-                                            data-trwl-event-id="{{$status->event?->id}}"
-                                    >
+                                    <a href="{{ route('stationboard', [
+                                            'tripId' => $status->checkin->trip->id,
+                                            'lineName' => $status->checkin->trip->linename,
+                                            'start' => $status->checkin->originStopover->station->id,
+                                            'destination' => $status->checkin->destinationStopover->station->id,
+                                            'departure' => $status->checkin->originStopover->departure_planned->toIso8601String(),
+                                            'idType' => 'trwl'
+                                        ]) }}" class="dropdown-item">
                                         <div class="dropdown-icon-suspense">
                                             <i class="fas fa-user-plus" aria-hidden="true"></i>
                                         </div>
                                         {{__('status.join')}}
-                                    </button>
+                                    </a>
                                 </li>
                                 <x-mute-button :user="$status->user" :dropdown="true"/>
                                 <x-block-button :user="$status->user" :dropdown="true"/>
+                                <li>
+                                    <a href="{{ route('report', ['subjectType' => 'Status', 'subjectId' => $status->id]) }}"
+                                       class="dropdown-item">
+                                        <div class="dropdown-icon-suspense">
+                                            <i class="fas fa-flag" aria-hidden="true"></i>
+                                        </div>
+                                        {{__('status.report')}}
+                                    </a>
+                                </li>
                             @endif
                             @admin
                             <li>
@@ -297,7 +356,7 @@
             </li>
         </ul>
     </div>
-    @if(\Illuminate\Support\Facades\Gate::allows('like', $status) && Route::current()->uri == "status/{id}")
+    @if(Gate::allows('like', $status) && Route::current()->uri == "status/{id}")
         @foreach($status->likes as $like)
             <div class="card-footer text-muted clearfix">
                 <a href="{{ route('profile', ['username' => $like->user->username]) }}">

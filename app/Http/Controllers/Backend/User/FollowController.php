@@ -2,9 +2,8 @@
 
 namespace App\Http\Controllers\Backend\User;
 
-use App\Helpers\CacheKey;
 use App\Exceptions\AlreadyFollowingException;
-use App\Exceptions\PermissionException;
+use App\Helpers\CacheKey;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\UserController;
 use App\Models\Follow;
@@ -16,6 +15,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
 use InvalidArgumentException;
 
 abstract class FollowController extends Controller
@@ -37,12 +37,10 @@ abstract class FollowController extends Controller
      * @param User   $user - The acting user
      *
      * @return bool|null
-     * @throws PermissionException
+     * @throws AuthorizationException
      */
     public static function removeFollower(Follow $follow, User $user): bool|null {
-        if ($user->cannot('delete', $follow)) {
-            throw new PermissionException();
-        }
+        Gate::forUser($user)->authorize('delete', $follow);
         return $follow->delete();
     }
 
@@ -64,13 +62,17 @@ abstract class FollowController extends Controller
      * @param int $userId     The id of the user who is approving a follower
      * @param int $approverId The id of a to-be-approved follower
      *
-     * @throws ModelNotFoundException|AlreadyFollowingException
+     * @throws ModelNotFoundException
      * @throws AuthorizationException
      */
     public static function approveFollower(int $userId, int $approverId): bool {
         $request = FollowRequest::where('user_id', $approverId)->where('follow_id', $userId)->firstOrFail();
 
-        $follow = UserController::createFollow($request->user, $request->requestedFollow, true);
+        try {
+            $follow = UserController::createFollow($request->user, $request->requestedFollow, true);
+        } catch (AlreadyFollowingException $e) {
+            $follow = true;
+        }
 
         if ($follow) {
             $request->delete();
@@ -116,9 +118,14 @@ abstract class FollowController extends Controller
                                      'user_id'   => $user->id,
                                      'follow_id' => $userToFollow->id
                                  ]);
-        $userToFollow->fresh();
+        $userToFollow->refresh();
         $userToFollow->notify(new UserFollowed($follow));
         Cache::forget(CacheKey::getFriendsLeaderboardKey($user->id));
         return $userToFollow;
+    }
+
+    public static function isFollowingEachOther(User $user, User $otherUser): bool {
+        return $user->userFollowers->contains('id', $otherUser->id)
+               && $user->userFollowings->contains('id', $otherUser->id);
     }
 }
