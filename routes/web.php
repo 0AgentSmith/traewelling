@@ -65,7 +65,7 @@ Route::get('/leaderboard', [LeaderboardController::class, 'renderLeaderboard'])
 Route::get('/leaderboard/{date}', [LeaderboardController::class, 'renderMonthlyLeaderboard'])
      ->name('leaderboard.month');
 
-Route::get('/statuses/active', [FrontendStatusController::class, 'getActiveStatuses'])
+Route::view('/statuses/active', 'active-journeys')
      ->name('statuses.active');
 
 Route::get('/event/{slug}', [FrontendStatusController::class, 'statusesByEvent'])
@@ -126,7 +126,13 @@ Route::middleware(['auth', 'privacy'])->group(function() {
          ->name('provider.destroy'); //TODO: Replace with API Endpoint
 
     Route::prefix('stats')->group(static function() {
-        Route::get('/', [StatisticController::class, 'renderMainStats'])
+        Route::permanentRedirect('/', '/statistics');
+        Route::permanentRedirect('/stations', '/statistics/stations');
+        Route::permanentRedirect('/daily/{dateString}', '/statistics/daily/{dateString}');
+    });
+
+    Route::prefix('statistics')->group(static function() {
+        Route::get('/', [VueFrontendController::class, 'statsDashboard'])
              ->name('stats');
         Route::get('/stations', [StatisticController::class, 'renderStations'])
              ->name('stats.stations');
@@ -190,7 +196,7 @@ Route::middleware(['auth', 'privacy'])->group(function() {
              ->name('deltoken'); //TODO: Replace with API Endpoint
     });
 
-    Route::get('/dashboard', [FrontendStatusController::class, 'getDashboard'])
+    Route::view('/dashboard', 'dashboard')
          ->name('dashboard');
 
     Route::post('/status/update', [StatusController::class, 'updateStatus'])
@@ -210,7 +216,7 @@ Route::middleware(['auth', 'privacy'])->group(function() {
     Route::get('/transport/train/autocomplete/{station}', [FrontendTransportController::class, 'TrainAutocomplete'])
          ->name('transport.train.autocomplete');
 
-    Route::get('/stationboard', [VueFrontendController::class, 'stationboard'])->name('stationboard');
+    Route::get('/stationboard', [VueFrontendController::class, 'stationBoard'])->name('stationboard');
 
     Route::redirect('/trains/stationboard', '/stationboard')->name('trains.stationboard');
 
@@ -233,4 +239,5 @@ Route::get('/.well-known/webfinger', [WebFingerController::class, 'endpoint']);
 Route::prefix('debug')->group(function() {
     // routes for debugging purposes and to show users which data is used by current instance
     Route::get('/motis-sources', [DebugController::class, 'showMotisSources']);
+    Route::get('/stations', [DebugController::class, 'showStationMap']);
 });

@@ -13,10 +13,12 @@ import {
 import Input from "./Partials/Input.vue";
 import Select from "./Partials/Select.vue";
 import {SelectOption} from "./Partials/SelectOption";
-import DataLilst from "./Partials/DataLilst.vue";
 import {Notyf} from "notyf";
 import Textfield from "./Partials/Textfield.vue";
-
+import {showApiValidationErrors} from "../../helpers/NotyfHelper";
+import TimezoneDropdown from "./Partials/TimezoneDropdown.vue";
+import {useUserStore} from "../../stores/user";
+const userStore = useUserStore();
 const notyf = new Notyf({position: {x: "right", y: "bottom"}});
 const api = new Api({baseUrl: window.location.origin + '/api/v1'});
 const timezones = Intl.supportedValuesOf('timeZone').map((timezone) => {
@@ -53,7 +55,7 @@ const mapData = (data: UserProfileSettingsResource) => {
     displayName: data.displayName,
     privateProfile: data.privateProfile,
     preventIndex: data.preventIndex,
-    privacyHideDays: data.privacyHideDays,
+    privacyHideDays: data.privacyHideDays == 0 ? null : data.privacyHideDays,
     defaultStatusVisibility: data.defaultStatusVisibility,
     mastodonVisibility: data.mastodonVisibility,
     mapProvider: data.mapProvider,
@@ -82,12 +84,15 @@ const updateProfile = () => {
   api.settings.updateProfileSettings(userData.value).then(res => {
     if (res.ok) {
       userData.value = mapData(res.data.data);
+      userStore.fetchSettings(true);
       notyf.success(trans('settings.saved'));
     }
   }).catch((res) => {
     if (res.status === 422) {
       // Handle validation errors
       errors.value = res.error.errors;
+      // foreach error and show it
+      showApiValidationErrors(notyf, errors.value);
     } else {
       notyf.error(trans('generic.error'));
     }
@@ -133,18 +138,8 @@ getDefaultUserData();
               autocomplete="email"
               required="true"
           />
-          <Select
-              :title="trans('user.mapprovider')"
-              :name="'mapprovider'"
-              v-model="userData.mapProvider"
-              :options="providers"
-              :errors="errors.mapProvider"
-          />
-          <DataLilst
+          <TimezoneDropdown
               v-model="userData.timezone"
-              :errors="errors.timezone"
-              :options="timezones"
-              :title="trans('user.timezone')"
           />
 
           <Select

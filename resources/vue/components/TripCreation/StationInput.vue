@@ -19,6 +19,14 @@ export default {
     departure: {
       type: Boolean,
       default: true
+    },
+    arrivalTime: {
+      type: String,
+      default: ''
+    },
+    departureTime: {
+      type: String,
+      default: ''
     }
   },
   emits: ['update:station', 'update:timeFieldA', 'update:timeFieldB', 'delete'],
@@ -114,7 +122,7 @@ export default {
         return;
       }
       this.loading = true;
-      if (!this.stationInput || this.stationInput.length < 3) {
+      if (!this.stationInput || this.stationInput.length < 2) {
         this.autocompleteList = [];
         this.loading = false;
         return;
@@ -134,11 +142,21 @@ export default {
     // There is a plugin for this, but it's not worth it with only one component
     this.id = Math.random().toString().substring(2);
     this.getRecent();
+
+    // important for import
+    this.timeFieldA = this.formatTime(this.arrivalTime);
+    this.timeFieldB = this.formatTime(this.departureTime);
   },
   watch: {
     stationInput: _.debounce(function () {
       this.autocomplete();
     }, 500),
+    arrivalTime(newVal) {
+      this.timeFieldA = this.formatTime(newVal);
+    },
+    departureTime(newVal) {
+      this.timeFieldB = this.formatTime(newVal);
+    },
   },
 };
 </script>
@@ -175,7 +193,6 @@ export default {
         />
       </ul>
 
-
       <!-- Time Fields -->
       <div class="row g-3 align-items-center justify-content-between mt-2" v-if="departure && arrival">
         <div class="col-auto">
@@ -189,6 +206,7 @@ export default {
               class="form-control mobile-input-fs-16"
               type="datetime-local"
               ref="timeFieldA"
+              :value="arrivalTime"
               @input="timeFieldAChanged"
           >
         </div>
@@ -206,6 +224,7 @@ export default {
               class="form-control mobile-input-fs-16"
               type="datetime-local"
               ref="timeFieldB"
+              :value="departureTime"
               @input="timeFieldBChanged"
           >
         </div>
@@ -230,19 +249,3 @@ export default {
     </button>
   </div>
 </template>
-
-<style>
-.autocomplete-item {
-  background-color: var(--bs-modal-bg) !important;
-  border: none;
-  border-bottom: 1px solid var(--bs-light);
-}
-
-.autocomplete-item:last-child {
-  border-bottom: none;
-}
-
-.input-group-button {
-  height: calc(2.08rem + 2px);
-}
-</style>

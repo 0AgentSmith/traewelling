@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\API\v1;
 
+use App\DataProviders\Motis;
+use App\Enum\DataProvider;
 use App\Http\Controllers\Backend\Transport\StationController as StationBackendController;
 use App\Http\Resources\StationResource;
 use App\Models\Checkin;
@@ -11,13 +13,23 @@ use App\Models\Station;
 use App\Models\StationIdentifier;
 use App\Models\Stopover;
 use App\Models\Trip;
+use App\Repositories\StationRepository;
+use App\StationIdentifierType;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Log;
 
 class StationController extends Controller
 {
+    private StationRepository $stationRepository;
+
+    public function __construct(StationRepository $stationRepository) {
+        $this->stationRepository = $stationRepository;
+    }
+
     public function store(Request $request): StationResource {
         $this->authorize('create', Station::class);
 
@@ -150,38 +162,166 @@ class StationController extends Controller
      *      operationId="indexStation",
      *      tags={"Checkin"},
      *      summary="Search for stations",
-     *      description="UNSTABLE: This request returns an array of max. 20 station objects matching the query. **CAUTION:** All
-     *      slashes (as well as encoded to %2F) in {query} need to be replaced, preferrably by a space (%20)",
-     * @OA\Parameter(
+     *      description="UNSTABLE: Returns stations by fuzzy text, exact identifier, or within a bounding box (BBOX). **CAUTION:** Slashes in {query} must be replaced (e.g. with %20).",
+     *      @OA\Parameter(
      *          name="query",
      *          in="query",
-     *          description="station query",
-     *          example="Karls"
-     *     ),
-     * @OA\Response(
+     *          description="Fuzzy station search",
+     *          example="Karlsruhe Hbf",
+     *          @OA\Schema(type="string", maxLength=255)
+     *      ),
+     *      @OA\Parameter(
+     *          name="identifier_provider",
+     *          in="query",
+     *          description="Identifier provider for exact lookup",
+     *          example="ibnr",
+     *          @OA\Schema(type="string", enum={"ibnr", "transitous"})
+     *      ),
+     *      @OA\Parameter(
+     *          name="identifier",
+     *          in="query",
+     *          description="Station identifier for exact lookup",
+     *          example="8000191",
+     *          @OA\Schema(type="string", maxLength=255)
+     *      ),
+     *      @OA\Parameter(
+     *          name="min_lat",
+     *          in="query",
+     *          description="Minimum latitude of BBOX (WGS84, -90..90)",
+     *          example=48.90,
+     *          @OA\Schema(type="number", format="float")
+     *      ),
+     *      @OA\Parameter(
+     *          name="max_lat",
+     *          in="query",
+     *          description="Maximum latitude of BBOX (WGS84, -90..90)",
+     *          example=49.10,
+     *          @OA\Schema(type="number", format="float")
+     *      ),
+     *      @OA\Parameter(
+     *          name="min_lon",
+     *          in="query",
+     *          description="Minimum longitude of BBOX (WGS84, -180..180)",
+     *          example=8.20,
+     *          @OA\Schema(type="number", format="float")
+     *      ),
+     *      @OA\Parameter(
+     *          name="max_lon",
+     *          in="query",
+     *          description="Maximum longitude of BBOX (WGS84, -180..180)",
+     *          example=8.60,
+     *          @OA\Schema(type="number", format="float")
+     *      ),
+     *      @OA\Parameter(
+     *          name="limit",
+     *          in="query",
+     *          description="Maximum number of results (capped at 100).",
+     *          example=50,
+     *          @OA\Schema(type="integer", minimum=1, maximum=100)
+     *      ),
+     *      @OA\Response(
      *          response=200,
      *          description="successful operation",
      *          @OA\JsonContent(
      *              @OA\Property(property="data", type="array",
-     *                  @OA\Items(
-     *                      ref="#/components/schemas/StationResource"
-     *                  )
+     *                  @OA\Items(ref="#/components/schemas/StationResource")
      *              )
      *          )
-     *       ),
-     * @OA\Response(response=401, description="Unauthorized"),
-     * @OA\Response(response=503, description="There has been an error with our data provider"),
-     *       security={
-     *          {"passport": {"create-statuses"}}, {"token": {}}
-     *
-     *       }
-     *     )
+     *      ),
+     *      @OA\Response(response=401, description="Unauthorized"),
+     *      @OA\Response(response=404, description="Station not found"),
+     *      @OA\Response(response=503, description="There has been an error with our data provider"),
+     *      security={{"passport": {"create-statuses"}}, {"token": {}}}
+     * )
      */
-    public function index(Request $request): JsonResponse {
-        $validated = $request->validate(['query' => 'string']);
+    public function index(Request $request): AnonymousResourceCollection|JsonResponse {
+        $validated = $request->validate([
+                                            // option 1: fuzzy search
+                                            'query'               => ['required_without_all:identifier,identifier_provider,min_lat,max_lat,min_lon,max_lon', 'string', 'max:255'],
 
-        $stations = (new StationBackendController())->search($validated['query']);
-        return $this->sendResponse(StationResource::collection($stations));
+                                            // option 2: exact search per Identifier
+                                            'identifier_provider' => ['required_without_all:query,min_lat,max_lat,min_lon,max_lon', 'string', 'in:ibnr,transitous'],
+                                            'identifier'          => ['required_without_all:query,min_lat,max_lat,min_lon,max_lon', 'string', 'max:255'],
+
+                                            // option 3: BBOX-Koordinaten
+                                            'min_lat'             => ['sometimes', 'numeric', 'between:-90,90'],
+                                            'max_lat'             => ['sometimes', 'numeric', 'between:-90,90'],
+                                            'min_lon'             => ['sometimes', 'numeric', 'between:-180,180'],
+                                            'max_lon'             => ['sometimes', 'numeric', 'between:-180,180'],
+
+                                            'limit' => ['sometimes', 'integer', 'min:1', 'max:250'],
+                                        ]);
+
+        $hasAnyBboxParam = $request->filled('min_lat') || $request->filled('max_lat') || $request->filled('min_lon') || $request->filled('max_lon');
+
+        if ($hasAnyBboxParam) {
+            $request->validate([
+                                   'min_lat' => ['required', 'numeric', 'between:-90,90'],
+                                   'max_lat' => ['required', 'numeric', 'between:-90,90'],
+                                   'min_lon' => ['required', 'numeric', 'between:-180,180'],
+                                   'max_lon' => ['required', 'numeric', 'between:-180,180'],
+                               ]);
+
+            $minLat = (float) $request->input('min_lat');
+            $maxLat = (float) $request->input('max_lat');
+            $minLon = (float) $request->input('min_lon');
+            $maxLon = (float) $request->input('max_lon');
+
+            // make sure min < max
+            if ($minLat > $maxLat) {
+                [$minLat, $maxLat] = [$maxLat, $minLat];
+            }
+            if ($minLon > $maxLon) {
+                [$minLon, $maxLon] = [$maxLon, $minLon];
+            }
+
+            $limit = min(max((int) $request->input('limit', 250), 1), 250);
+
+            // get stations within BBOX from database
+            $stations = Station::whereBetween('latitude', [$minLat, $maxLat])
+                               ->whereBetween('longitude', [$minLon, $maxLon])
+                               ->orderByDesc('relevance')
+                               ->orderBy('name')
+                               ->limit($limit)
+                               ->get();
+
+            return StationResource::collection($stations);
+        }
+
+        // fuzzy search
+        if (array_key_exists('query', $validated)) {
+            $stations = (new StationBackendController())->search($validated['query']);
+            return StationResource::collection($stations);
+        }
+
+        // exact search by identifier
+        $identifier = $validated['identifier'] ?? null;
+        $provider   = $validated['identifier_provider'] ?? null;
+        $station    = null;
+
+        if ($provider === 'ibnr') {
+            $station = $this->stationRepository->getStationByIbnr($identifier);
+        }
+
+        if ($provider === 'transitous') {
+            try {
+                $station = $this->stationRepository->getStationByIdentifier(
+                    $identifier,
+                    StationIdentifierType::MOTIS,
+                    $provider
+                ) ?? (new Motis(DataProvider::TRANSITOUS))->fetchStationFromApi($identifier);
+            } catch (\Exception $e) {
+                report($e);
+                Log::error('Error fetching station from Transitous: ' . $e->getMessage());
+                return $this->sendError('Error fetching station from Transitous', 503);
+            }
+        }
+
+        if (!$station) {
+            return response()->json(null, 404);
+        }
+
+        return StationResource::collection([new StationResource($station)]);
     }
 
 

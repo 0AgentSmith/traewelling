@@ -8,7 +8,7 @@ use App\Enum\HafasTravelType;
 use App\Enum\TripSource;
 use App\Exceptions\ManualTripValidationException;
 use App\Http\Controllers\Controller;
-use App\Models\HafasOperator;
+use App\Models\Operator;
 use App\Models\Station;
 use App\Models\Stopover;
 use App\Models\Trip;
@@ -23,7 +23,7 @@ class ManualTripCreator extends Controller
     private HafasTravelType $category;
     private string          $lineName;
     private ?int            $journeyNumber;
-    private ?HafasOperator  $operator;
+    private ?Operator       $operator  = null;
     private Station         $origin;
     private Carbon          $originDeparturePlanned;
     private ?Carbon         $originDepartureReal;
@@ -32,7 +32,14 @@ class ManualTripCreator extends Controller
     private ?Carbon         $destinationArrivalReal;
     private array           $stopovers = [];
 
+    /**
+     * @throws ManualTripValidationException
+     */
     public function createFullTrip(): Trip {
+        // checks first
+        $this->checkIfStopoverAreValid();
+
+        // creation
         $this->createTrip();
         $this->createOriginStopover();
         $this->createDestinationStopover();
@@ -41,6 +48,17 @@ class ManualTripCreator extends Controller
     }
 
     private function createTrip(): void {
+        \Log::debug('Create manual trip', [
+            'user_id'        => auth()->user()?->id ?? null,
+            'category'       => $this->category,
+            'lineName'       => $this->lineName,
+            'journeyNumber'  => $this->journeyNumber,
+            'operator_id'    => $this->operator->id ?? null,
+            'origin_id'      => $this->origin->id,
+            'destination_id' => $this->destination->id,
+            'departure'      => $this->originDeparturePlanned,
+            'arrival'        => $this->destinationArrivalPlanned,
+        ]);
         $this->trip = Trip::create([
                                        'trip_id'        => $this->generateUniqueTripId(),
                                        'category'       => $this->category,
@@ -61,6 +79,15 @@ class ManualTripCreator extends Controller
         if ($this->trip === null) {
             throw new InvalidArgumentException('Cannot create stopover without trip');
         }
+        \Log::debug('Create origin stopover for manual trip', [
+            'user_id'           => auth()->user()?->id ?? null,
+            'trip_id'           => $this->trip->trip_id,
+            'train_station_id'  => $this->origin->id,
+            'arrival_planned'   => $this->originDeparturePlanned,
+            'departure_planned' => $this->originDeparturePlanned,
+            'arrival_real'      => $this->originDepartureReal,
+            'departure_real'    => $this->originDepartureReal,
+        ]);
         Stopover::create([
                              'trip_id'           => $this->trip->trip_id,
                              'train_station_id'  => $this->origin->id,
@@ -75,6 +102,15 @@ class ManualTripCreator extends Controller
         if ($this->trip === null) {
             throw new InvalidArgumentException('Cannot create stopover without trip');
         }
+        \Log::debug('Create destination stopover for manual trip', [
+            'user_id'           => auth()->user()?->id ?? null,
+            'trip_id'           => $this->trip->trip_id,
+            'train_station_id'  => $this->origin->id,
+            'arrival_planned'   => $this->originDeparturePlanned,
+            'departure_planned' => $this->originDeparturePlanned,
+            'arrival_real'      => $this->originDepartureReal,
+            'departure_real'    => $this->originDepartureReal,
+        ]);
         Stopover::create([
                              'trip_id'           => $this->trip->trip_id,
                              'train_station_id'  => $this->destination->id,
@@ -104,7 +140,7 @@ class ManualTripCreator extends Controller
         return $this;
     }
 
-    public function setOperator(?HafasOperator $operator): ManualTripCreator {
+    public function setOperator(?Operator $operator): ManualTripCreator {
         $this->operator = $operator;
         return $this;
     }
@@ -153,11 +189,36 @@ class ManualTripCreator extends Controller
         return $this;
     }
 
+    /**
+     * @throws ManualTripValidationException
+     */
+    private function checkIfStopoverAreValid(): void {
+        // check if there are duplicate stopovers (same station and same planned arrival and departure)
+        $seen = [];
+
+        foreach ($this->stopovers as $stopover) {
+            $key = $stopover['station']->id . '|' . $stopover['arrival']->toIso8601String() . '|' . $stopover['departure']->toIso8601String();
+            if (isset($seen[$key])) {
+                throw new ManualTripValidationException('Duplicate stopover for station ' . $stopover['station']->name);
+            }
+            $seen[$key] = true;
+        }
+    }
+
     private function processStopovers(): void {
         if ($this->trip === null) {
             throw new InvalidArgumentException('Cannot add stopover without trip');
         }
         foreach ($this->stopovers as $stopover) {
+            \Log::debug('Create stopover for manual trip', [
+                'user_id'           => auth()->user()?->id ?? null,
+                'trip_id'           => $this->trip->trip_id,
+                'train_station_id'  => $stopover['station']->id,
+                'arrival_planned'   => $stopover['arrival'],
+                'departure_planned' => $stopover['departure'],
+                'arrival_real'      => $stopover['arrival_real'],
+                'departure_real'    => $stopover['departure_real'],
+            ]);
             Stopover::create([
                                  'trip_id'           => $this->trip->trip_id,
                                  'train_station_id'  => $stopover['station']->id,

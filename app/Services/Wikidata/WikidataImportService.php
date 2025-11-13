@@ -7,13 +7,14 @@ use App\Dto\Wikidata\WikidataEntity;
 use App\Exceptions\Wikidata\FetchException;
 use App\Models\Station;
 use App\Models\StationName;
+use App\StationIdentifierType;
 use Illuminate\Support\Facades\Log;
 
 class WikidataImportService
 {
 
     // supported types global definieren - todo: support wikidata hierarchie so we don't need to define all types separately
-    private const SUPPORTED_TYPES = [
+    private const array SUPPORTED_TYPES = [
         'Q55490', // Durchgangsbahnhof
         'Q18543139', // Hauptbahnhof
         'Q27996466', // Bahnhof (betrieblich)
@@ -46,6 +47,7 @@ class WikidataImportService
         'Q1478783', // Fährhafen
         'Q4303352', // passenger ship terminal
         'Q55678', // railway stop, Haltepunkt, Haltestelle
+        'Q494829', //bus station
     ];
 
     public static function importStation(string $qId): Station {
@@ -57,7 +59,8 @@ class WikidataImportService
 
         $name = $wikidataEntity->getClaims('P1448')[0]['mainsnak']['datavalue']['value']['text'] //P1448 = official name
                 ?? $wikidataEntity->getLabel('de') //german label
-                   ?? $wikidataEntity->getLabel(); //english label or null if also not available
+                   ?? $wikidataEntity->getLabel('mul') //multilingual label
+                      ?? $wikidataEntity->getLabel(); //english label or null if also not available
 
         if ($name === null) {
             throw new \InvalidArgumentException('No name found for entity ' . $qId);
@@ -72,30 +75,65 @@ class WikidataImportService
         $rl100 = $wikidataEntity->getClaims('P8671')[0]['mainsnak']['datavalue']['value'] ?? null;   //P8671 = RL100
         $ifopt = $wikidataEntity->getClaims('P12393')[0]['mainsnak']['datavalue']['value'] ?? null;  //P12393 = IFOPT
         if ($ifopt !== null) {
-            $splittedIfopt = explode(':', $ifopt);
+            $splitIfopt = explode(':', $ifopt);
         }
 
-        //if ibnr is already in use, we can't import the station
+        //if ibnr is already in use, we can't import the station, but we can add the wikidata information to the existing station
         if ($ibnr !== null && Station::where('ibnr', $ibnr)->exists()) {
-            throw new \InvalidArgumentException('IBNR ' . $ibnr . ' already in use');
+            $station              = Station::where('ibnr', $ibnr)->first();
+            $station->wikidata_id = $qId;
+
+            if ($station->ifopt_a === null && isset($splitIfopt)) {
+                $station->ifopt_a = $splitIfopt[0] ?? null;
+                $station->ifopt_b = $splitIfopt[1] ?? null;
+                $station->ifopt_c = $splitIfopt[2] ?? null;
+                $station->ifopt_d = $splitIfopt[3] ?? null;
+                $station->ifopt_e = $splitIfopt[4] ?? null;
+            }
+
+            if ($station->rilIdentifier === null && $rl100 !== null) {
+                $station->rilIdentifier = $rl100;
+            }
+
+            $station->save();
+            self::saveStationNames($station, $wikidataEntity);
+
+            return $station;
         }
 
         $station = Station::create(
             [
-                'name'          => $name,
-                'latitude'      => $coordinates->latitude,
-                'longitude'     => $coordinates->longitude,
-                'wikidata_id'   => $qId,
-                'rilIdentifier' => $rl100,
-                'ibnr'          => $ibnr,
-                'ifopt_a'       => $splittedIfopt[0] ?? null,
-                'ifopt_b'       => $splittedIfopt[1] ?? null,
-                'ifopt_c'       => $splittedIfopt[2] ?? null,
-                'ifopt_d'       => $splittedIfopt[3] ?? null,
-                'ifopt_e'       => $splittedIfopt[4] ?? null,
-                'source'        => 'wikidata',
+                'name'      => $name,
+                'latitude'  => $coordinates->latitude,
+                'longitude' => $coordinates->longitude,
+                'ifopt_a'   => $splitIfopt[0] ?? null, // @deprecated: save in station_identifiers later
+                'ifopt_b'   => $splitIfopt[1] ?? null, // @deprecated: save in station_identifiers later
+                'ifopt_c'   => $splitIfopt[2] ?? null, // @deprecated: save in station_identifiers later
+                'ifopt_d'   => $splitIfopt[3] ?? null, // @deprecated: save in station_identifiers later
+                'ifopt_e'   => $splitIfopt[4] ?? null, // @deprecated: save in station_identifiers later
+                'source'    => 'wikidata',
             ]
         );
+
+        $station->stationIdentifiers()->create([
+                                                   'type'       => StationIdentifierType::WIKIDATA_ID,
+                                                   'identifier' => $qId,
+                                               ]);
+
+        if ($rl100) {
+            $station->stationIdentifiers()->create([
+                                                       'type'       => StationIdentifierType::DE_DB_RIL100,
+                                                       'identifier' => $rl100,
+                                                   ]);
+        }
+
+        if ($ibnr) {
+            $station->stationIdentifiers()->create([
+                                                       'type'       => StationIdentifierType::DE_DB_IBNR,
+                                                       'identifier' => (string) $ibnr,
+                                                   ]);
+        }
+
         self::saveStationNames($station, $wikidataEntity);
         return $station;
     }

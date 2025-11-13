@@ -12,6 +12,7 @@ use App\Models\Trip;
 use App\Services\GeoService;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use JsonException;
 use stdClass;
@@ -39,6 +40,8 @@ class LocationController
     }
 
     public static function forStatus(Status $status, ?GeoService $geoService = null): LocationController {
+        $status->checkin->loadMissing(['originStopover', 'destinationStopover']);
+
         return new self(
             $status->checkin->trip,
             $status->checkin->originStopover,
@@ -70,10 +73,10 @@ class LocationController
 
     public function calculateLivePosition(): ?LivePointDto {
         $newStopovers = $this->filterStopoversFromStatus();
-
-        if (!$newStopovers || !isset($this->trip->polyline->polyline)) {
+        if (!$newStopovers) {
             return null;
         }
+
         if (count($newStopovers) === 1) {
             return new LivePointDto(
                 (new Coordinate(
@@ -134,7 +137,7 @@ class LocationController
         }
     }
 
-    private function getDistanceFromGeoJson(stdClass $geoJson): int {
+    private function getDistanceFromGeoJson(stdClass|FeatureCollection $geoJson): int {
         $fullDistance = 0;
         $lastStopover = null;
         foreach ($geoJson->features as $stopover) {
@@ -156,15 +159,21 @@ class LocationController
         return $geoJson;
     }
 
-    /**
-     * @throws JsonException
-     */
-    private function getPolylineWithTimestamps(): stdClass {
+    private function getPolylineWithTimestamps(?string $polyLine = null): stdClass {
         $geoJsonObj = $this->emptyGeoJson();
-        if (!empty($this->trip->polyline)) {
+        $polyLine   = $polyLine ?? $this->trip->polyline?->polyline;
+
+        // Cache currently commented out, so it doesn't cause RAM-overflow.
+        // $cacheName      = sprintf('trip_%s_polyline_%s', $this->trip->id, sha1($polyLine));
+        // $cachedPolyline = Cache::get($cacheName);
+        // if (!empty($cachedPolyline)) {
+        //    return $cachedPolyline;
+        // }
+
+        if (!empty($polyLine)) {
             // decode GeoJSON object from polyline
             try {
-                $geoJsonObj = json_decode($this->trip->polyline->polyline, false, 512, JSON_THROW_ON_ERROR);
+                $geoJsonObj = json_decode($polyLine, false, 512, JSON_THROW_ON_ERROR);
             } catch (JsonException $e) {
                 // if decoding fails, return empty GeoJSON object
                 $geoJsonObj = $this->emptyGeoJson();
@@ -177,23 +186,16 @@ class LocationController
             return $stopover;
         });
 
-        foreach ($geoJsonObj->features as $polylineFeature) {
-            if (!isset($polylineFeature->properties->id)) {
-                continue;
-            }
-
-            $stopover = $stopovers->where('station.ibnr', $polylineFeature->properties->id)
-                                  ->where('passed', false)
-                                  ->first();
-
-            if (is_null($stopover)) {
-                continue;
-            }
-
-            $stopover->passed                               = true;
-            $polylineFeature->properties->departure_planned = $stopover->departure_planned?->clone();
-            $polylineFeature->properties->arrival_planned   = $stopover->arrival_planned?->clone();
+        if (!isset($geoJsonObj->features)) {
+            $geoJsonObj->features = [];
         }
+
+        $this->mapStopoversToPolyline($geoJsonObj, $stopovers);
+
+        // Cache currently commented out, so it doesn't cause RAM-overflow.
+        // Cache::forget($cacheName);
+        // Cache::put($cacheName, $geoJsonObj, 60 * 60 * 24);
+
         return $geoJsonObj;
     }
 
@@ -201,7 +203,7 @@ class LocationController
         try {
             $geoJson = $this->getPolylineBetween();
             if ($geoJson instanceof FeatureCollection) {
-                return $geoJson->features[0]->getCoordinates($invert);
+                return $geoJson->features->first()->getCoordinates($invert);
             }
 
             $mapLines = [];
@@ -223,13 +225,66 @@ class LocationController
         }
     }
 
+    /**
+     * Constructs a polyline from the route segments of the trip's stopovers between the origin and destination.
+     * The relevant route segment is saved in the previous stopover.
+     * If absolutely no route segments are found, null is returned.
+     */
+    private function getPolylineFromRouteSegments(): ?FeatureCollection {
+        $coordinates   = [];
+        $routeSegments = 0;
+        $firstStopHit = false;
+        foreach ($this->trip->stopovers as $stopover) {
+            // Skip stopovers until we reach the origin
+            if (!$firstStopHit) {
+                if ($stopover->is($this->origin)) {
+                    $firstStopHit = true;
+                } else {
+                    continue;
+                }
+            }
+            // If no route segment is available, add the station coordinate directly
+            // Also add the station coordinate if we've reached the destination
+            if ($stopover->routeSegment === null || $stopover->is($this->destination)) {
+                $coordinates[] = new Coordinate(
+                    $stopover->station->latitude,
+                    $stopover->station->longitude
+                );
+                // If we reached the destination, break the loop
+                if ($stopover->is($this->destination)) {
+                    break;
+                }
+                continue;
+            }
+            // If we've reached the destination, break the loop
+            if ($stopover->is($this->destination)) {
+                break;
+            }
+            $coordinates = array_merge($coordinates, $stopover->routeSegment->getCoordinates());
+            $routeSegments++;
+        }
+
+        if (empty($coordinates) || $routeSegments < 1) {
+            return null;
+        }
+
+        $features = collect([new Feature($coordinates)]);
+        return new FeatureCollection($features);
+    }
+
     private function createPolylineFromStopovers(): FeatureCollection {
         $coordinates = [];
         $firstStop   = null;
         foreach ($this->trip->stopovers as $stopover) {
             if ($firstStop !== null || $stopover->is($this->origin)) {
-                $firstStop     = $stopover;
-                $coordinates[] = new Coordinate($stopover->station->latitude, $stopover->station->longitude);
+                $firstStop  = $stopover;
+                $coordinate = new Coordinate($stopover->station->latitude, $stopover->station->longitude);
+                $feature    = Feature::fromCoordinate($coordinate);
+                $feature->setStationId($stopover->station->id);
+                $feature->setDeparturePlanned($stopover->departure_planned?->toIso8601ZuluString());
+                $feature->setArrivalPlanned($stopover->arrival_planned?->toIso8601ZuluString());
+                $coordinates[] = $feature;
+
 
                 if ($stopover->is($this->destination)) {
                     break;
@@ -237,18 +292,64 @@ class LocationController
             }
         }
 
-        $features = new Collection([new Feature($coordinates)]);
+        $features = collect($coordinates);
         return new FeatureCollection($features);
     }
 
-    /**
-     * @throws JsonException
-     */
+    public function parseByIbnr(int|string|null $originIndex, mixed $data, int|string $key, int|string|null $destinationIndex): array {
+        if ($originIndex === null
+            && $this->origin->station->ibnr === (int) $data->properties->id
+            && isset($data->properties->departure_planned) //Important for ring lines!
+            && $this->origin->departure_planned->is($data->properties->departure_planned) //ring lines!
+        ) {
+            $originIndex = $key;
+        }
+
+        if ($destinationIndex === null
+            && $this->destination->station->ibnr === (int) $data->properties->id
+            && isset($data->properties->arrival_planned) //Important for ring lines!
+            && $this->destination->arrival_planned->is($data->properties->arrival_planned) //ring lines!
+        ) {
+            $destinationIndex = $key;
+        }
+        return [$originIndex, $destinationIndex];
+    }
+
+    public function parseByStationId(int|string|null $originIndex, mixed $data, int|string $key, int|string|null $destinationIndex): array {
+        if ($originIndex === null
+            && $this->origin->station->id === (int) $data->properties->stationId
+            && isset($data->properties->departure_planned) //Important for ring lines!
+            && $this->origin->departure_planned->is($data->properties->departure_planned) //ring lines!
+        ) {
+            $originIndex = $key;
+        }
+
+        if ($destinationIndex === null
+            && $this->destination->station->id === (int) $data->properties->stationId
+            && isset($data->properties->arrival_planned) //Important for ring lines!
+            && $this->destination->arrival_planned->is($data->properties->arrival_planned) //ring lines!
+        ) {
+            $destinationIndex = $key;
+        }
+        return [$originIndex, $destinationIndex];
+    }
+
     private function getPolylineBetween(bool $preserveKeys = true): stdClass|FeatureCollection {
         $this->trip->loadMissing(['stopovers.station']);
-        $geoJson = $this->getPolylineWithTimestamps();
+        $lineString = $this->getPolylineFromRouteSegments();
+        if ($lineString) {
+            return $lineString;
+        }
+
+        // lineString will be null if no route segments are available
+        // if null is given to getPolylineWithTimestamps, it will fallback to the trip's polyline
+        $geoJson = $this->getPolylineWithTimestamps($lineString);
         if (count((array) $geoJson->features) === 0) {
-            return $this->createPolylineFromStopovers();
+            $stopoversPolyline = $this->createPolylineFromStopovers();
+            $geoJson           = $this->getPolylineWithTimestamps(json_encode($stopoversPolyline));
+            if (count((array) $geoJson->features) === 0) {
+                return $this->emptyGeoJson();
+            }
         }
 
         $features = $geoJson->features;
@@ -256,24 +357,11 @@ class LocationController
         $originIndex      = null;
         $destinationIndex = null;
         foreach ($features as $key => $data) {
-            if (!isset($data->properties->id)) {
-                continue;
+            if (isset($data->properties->id)) {
+                [$originIndex, $destinationIndex] = $this->parseByIbnr($originIndex, $data, $key, $destinationIndex);
             }
-
-            if ($originIndex === null
-                && $this->origin->station->ibnr === (int) $data->properties->id
-                && isset($data->properties->departure_planned) //Important for ring lines!
-                && $this->origin->departure_planned->is($data->properties->departure_planned) //ring lines!
-            ) {
-                $originIndex = $key;
-            }
-
-            if ($destinationIndex === null
-                && $this->destination->station->ibnr === (int) $data->properties->id
-                && isset($data->properties->arrival_planned) //Important for ring lines!
-                && $this->destination->arrival_planned->is($data->properties->arrival_planned) //ring lines!
-            ) {
-                $destinationIndex = $key;
+            if (isset($data->properties->stationId)) {
+                [$originIndex, $destinationIndex] = $this->parseByStationId($originIndex, $data, $key, $destinationIndex);
             }
         }
         if (is_array($features)) { // object is a rarely stdClass without content if no features in the GeoJSON
@@ -289,8 +377,22 @@ class LocationController
         return $geoJson;
     }
 
+    private function hasEnoughRouteSegments(): bool {
+        $stopovers                = $this->trip->stopovers->sortBy('departure');
+
+        $routeSegments = 0;
+        foreach ($stopovers as $stopover) {
+            if ($stopover->route_segment_id) {
+                $routeSegments++;
+            }
+        }
+
+        return ($routeSegments / $stopovers->count()) >= 0.5;
+    }
+
     public function calculateDistance(): int {
         if (
+            $this->hasEnoughRouteSegments() ||
             $this->trip->polyline === null ||
             $this->trip->polyline?->polyline === null ||
             strlen($this->trip->polyline?->polyline) < 10
@@ -322,6 +424,10 @@ class LocationController
             report($e);
         }
 
+        if ($distance === 0) {
+            $distance = $this->calculateDistanceByStopovers();
+        }
+
         return $distance;
     }
 
@@ -343,6 +449,11 @@ class LocationController
                 $lastStopover = $stopover;
                 continue;
             }
+            if ($stopover->route_segment_id) {
+                $distance += $stopover->routeSegment->distance;
+                $lastStopover = $stopover;
+                continue;
+            }
             $distance     += $this->geoService->getDistance(
                 new Coordinate($lastStopover->station->latitude, $lastStopover->station->longitude),
                 new Coordinate($stopover->station->latitude, $stopover->station->longitude)
@@ -350,5 +461,36 @@ class LocationController
             $lastStopover = $stopover;
         }
         return $distance;
+    }
+
+    public function mapStopoversToPolyline(mixed $geoJsonObj, EloquentCollection|Collection $stopovers): void {
+        foreach ($geoJsonObj->features as $polylineFeature) {
+            if (isset($polylineFeature->properties->id)) {
+                $stopover = $stopovers->where('station.ibnr', $polylineFeature->properties->id)
+                                      ->where('passed', false)
+                                      ->first();
+            }
+            if (isset($polylineFeature->properties->stationId)) {
+                $stopover = $stopovers->where('station.id', $polylineFeature->properties->stationId)
+                                      ->where('passed', false)
+                                      ->first();
+            }
+
+
+            if (empty($stopover)) {
+                continue;
+            }
+
+            $stopover->passed                               = true;
+
+            // fix for old polyline formats where properties is an array
+            if (is_array($polylineFeature->properties)) {
+                $polylineFeature->properties['departure_planned'] = $stopover->departure_planned?->clone();
+                $polylineFeature->properties['arrival_planned']   = $stopover->arrival_planned?->clone();
+                continue;
+            }
+            $polylineFeature->properties->departure_planned = $stopover->departure_planned?->clone();
+            $polylineFeature->properties->arrival_planned   = $stopover->arrival_planned?->clone();
+        }
     }
 }

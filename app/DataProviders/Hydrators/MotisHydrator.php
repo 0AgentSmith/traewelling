@@ -8,19 +8,23 @@ use App\DataProviders\Repositories\MotisLicenseRepository;
 use App\DataProviders\Repositories\StationRepository;
 use App\Dto\Internal\BahnTrip;
 use App\Dto\Internal\Departure;
+use App\Dto\Internal\FilteredDepartures;
 use App\Enum\DataProvider;
-use App\Enum\HafasTravelType;
 use App\Enum\MotisCategory;
+use App\Http\Controllers\TransportController;
 use App\Hydrators\DepartureHydrator;
-use App\Models\HafasOperator;
+use App\Models\Operator;
+use App\Models\PolyLine;
 use App\Models\Station;
 use App\Models\Stopover;
 use App\Models\Trip;
+use App\Services\LicenseService;
 use App\Services\OperatorService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Traewelling\GooglePolyline\PolylineTranscoder;
 
 class MotisHydrator
 {
@@ -28,15 +32,18 @@ class MotisHydrator
     private MotisLicenseRepository $motisRepository;
     private StationRepository      $stationRepository;
     private OperatorService        $operatorService;
+    private LicenseService         $licenseService;
 
     public function __construct(
         ?MotisLicenseRepository $motisRepository = null,
         ?StationRepository      $stationRepository = null,
-        ?OperatorService        $operatorService = null
+        ?OperatorService        $operatorService = null,
+        ?LicenseService         $licenseService = null
     ) {
         $this->motisRepository   = $motisRepository ?? new MotisLicenseRepository();
         $this->stationRepository = $stationRepository ?? new StationRepository();
         $this->operatorService   = $operatorService ?? new OperatorService();
+        $this->licenseService    = $licenseService ?? new LicenseService();
     }
 
     public function parseLegToNewStopovers(mixed $leg, DataProvider $source): Collection {
@@ -107,8 +114,9 @@ class MotisHydrator
     }
 
     private function getStopoverData($station, mixed $rawStop, DataProvider $source, bool $realTime = false): array {
-        $station = $station ?? $this->stationRepository->updateOrCreateByIfopt($rawStop['stopId'], $source);
-        $station = $station ?? $this->stationRepository->createMotisStation($rawStop, $source);
+        $station    = $station ?? $this->stationRepository->updateOrCreateByIfopt($rawStop['stopId'], $source, $rawStop['lat'], $rawStop['lon']);
+        $station    = $station ?? $this->stationRepository->createMotisStationIdentifier($rawStop, $source);
+        $identifier = $this->stationRepository->getStationIdentifierByIdentifier($rawStop['stopId'], $source);
 
         $departurePlanned = isset($rawStop['scheduledDeparture']) ? Carbon::parse($rawStop['scheduledDeparture']) : null;
         $departureReal    = isset($rawStop['departure']) ? Carbon::parse($rawStop['departure']) : null;
@@ -128,65 +136,172 @@ class MotisHydrator
             'departure_platform_planned' => $platformPlanned,
             'arrival_platform_real'      => $realTime ? $platformReal : null,
             'departure_platform_real'    => $realTime ? $platformReal : null,
+            'station_identifier_id'      => $identifier?->id ?? null,
         ];
+    }
+
+    private function getCategoryFromLeg(mixed $leg): string {
+        $motisCategory = MotisCategory::tryFrom($leg['mode']);
+        if ($motisCategory === null) {
+            Log::error('Unknown Motis category', [
+                'mode' => $leg['mode'],
+            ]);
+            $motisCategory = MotisCategory::REGIONAL_RAIL;
+        }
+
+        return $motisCategory->getHTT()->value;
+    }
+
+    private function getPolylineFromLeg(mixed $leg): PolyLine {
+        $polylineModel = null;
+
+        if (!empty($leg['legGeometry']['points']) && !empty($leg['legGeometry']['precision'])) {
+            $precision   = $leg['legGeometry']['precision'];
+            $transcoder  = new PolylineTranscoder();
+            $coordinates = $transcoder->decodePolyline($leg['legGeometry']['points'], $precision);
+
+            $features = [];
+            foreach ($coordinates as $coord) {
+                $features[] = [
+                    'type'       => 'Feature',
+                    'geometry'   => [
+                        'type'        => 'Point',
+                        'coordinates' => [$coord->getLongitude(), $coord->getLatitude()],
+                    ],
+                    'properties' => new \stdClass(),
+                ];
+            }
+
+            // map stopovers to the closest point feature
+            $allStops = array_merge([$leg['from']], $leg['intermediateStops'], [$leg['to']]);
+            $stopIds  = array_column($allStops, 'stopId');
+            $stations = $this->stationRepository->getStationsByIdentifiers($stopIds, DataProvider::TRANSITOUS)->keyBy('motis_id');
+
+            foreach ($allStops as $stop) {
+                if (!isset($stop['lon']) || !isset($stop['lat']) || !isset($stop['stopId'])) continue;
+
+                // Find the internal station
+                $station = $stations->get($stop['stopId'])
+                           ?? $this->stationRepository->updateOrCreateByIfopt($stop['stopId'], DataProvider::TRANSITOUS)
+                              ?? $this->stationRepository->createMotisStationIdentifier($stop, DataProvider::TRANSITOUS);
+
+                if (!$station) continue;
+
+                // Find closest polyline point
+                $minDist    = null;
+                $closestKey = null;
+                foreach ($features as $key => $feature) {
+                    $dist = pow($feature['geometry']['coordinates'][0] - $stop['lon'], 2)
+                            + pow($feature['geometry']['coordinates'][1] - $stop['lat'], 2);
+                    if ($minDist === null || $dist < $minDist) {
+                        $minDist    = $dist;
+                        $closestKey = $key;
+                    }
+                }
+                if ($closestKey !== null) {
+                    $features[$closestKey]['properties'] = [
+                        'stationId'         => $station->id,
+                        'id'                => $station->ibnr ?? null,
+                        'name'              => $station->name ?? $stop['name'] ?? null,
+                        'arrival_planned'   => $stop['scheduledArrival'] ?? null,
+                        'departure_planned' => $stop['scheduledDeparture'] ?? null,
+                    ];
+                }
+            }
+
+            $geoJson = [
+                'type'     => 'FeatureCollection',
+                'features' => $features,
+            ];
+
+            $polylineModel = TransportController::getPolylineHash(json_encode($geoJson), 'motis');
+        }
+
+        return $polylineModel;
     }
 
     public function getTripData(mixed $leg, string $lineName, DataProvider $source): array {
         $originStation      = $this->stationRepository->getStationsByIdentifiers($leg['from']['stopId'], $source)->first()
                               ?? $this->stationRepository->updateOrCreateByIfopt($leg['from']['stopId'], $source)
-                                 ?? $this->stationRepository->createMotisStation($leg['from'], $source);
+                                 ?? $this->stationRepository->createMotisStationIdentifier($leg['from'], $source);
         $destinationStation = $this->stationRepository->getStationsByIdentifiers($leg['to']['stopId'], $source)->first()
                               ?? $this->stationRepository->updateOrCreateByIfopt($leg['to']['stopId'], $source)
-                                 ?? $this->stationRepository->createMotisStation($leg['to'], $source);
+                                 ?? $this->stationRepository->createMotisStationIdentifier($leg['to'], $source);
         $departure          = isset($leg['from']['departure']) ? Carbon::parse($leg['from']['departure']) : null;
         $arrival            = isset($leg['to']['arrival']) ? Carbon::parse($leg['to']['arrival']) : null;
-        $category           = MotisCategory::tryFrom($leg['mode'])?->getHTT()->value ?? HafasTravelType::REGIONAL;
-        $tripLineName       = !empty($leg['routeShortName']) ? $leg['routeShortName'] : $lineName;
-        $license            = $this->motisRepository->getLicense($leg['source'], $source);
-        $operator           = $this->parseOperator($leg);
+        $category           = $this->getCategoryFromLeg($leg);
+        $tripLineName       = !empty($leg['displayName']) ? $leg['displayName'] : $lineName;
+        $license            = $this->motisRepository->getActiveLicense($leg['source'], $source);
+        $operator           = $this->parseOperator($leg, $source);
+        $polyline           = $this->getPolylineFromLeg($leg);
+        $shortTripName      = !empty($leg['tripShortName']) ? $leg['tripShortName'] : null;
+        $shortTripName      = $shortTripName !== null ? preg_replace('/\D/', '', $shortTripName) : null;
 
-
-        return [
+        $payload = [
             'category'                => $category,
             'number'                  => $tripLineName,
             'linename'                => $tripLineName,
-            'journey_number'          => null,
+            'route_color'             => $leg['routeColor'] ?? null,
             'operator_id'             => $operator?->id,
             'origin_id'               => $originStation->id,
             'destination_id'          => $destinationStation->id,
-            'polyline_id'             => null, //TODO
+            'polyline_id'             => $polyline->id,
             'departure'               => $departure,
             'arrival'                 => $arrival,
             'source'                  => $source->value,
             'motis_source'            => $source->value . '/' . $leg['source'],
             'motis_source_license_id' => $license?->id ?? null,
         ];
+
+        if (is_numeric($shortTripName)) {
+            $payload['journey_number'] = $shortTripName;
+        }
+
+        return $payload;
     }
 
-    private function parseOperator(array $leg): ?HafasOperator {
+    private function parseOperator(array $leg, DataProvider $source): ?Operator {
         return $this->operatorService->parseTransitousOperator(
-            agencyId:   $leg['agencyId'] ?? null,
-            agencyName: $leg['agencyName'] ?? null,
+            motisAgencyId:   $leg['agencyId'] ?? null,
+            motisAgencyName: $leg['agencyName'] ?? null,
+            source:          $source,
         );
     }
 
-    public function mapDepartures(mixed $entries, Station $station, DataProvider $source): Collection {
-        $departures = collect();
+    private function checkLicenseData($rawDeparture, DataProvider $source, array &$removedEntries, int &$removedCount): bool {
+        if (config('trwl.motis.filter_licenses')) {
+            // Check if the source is licensed under an acceptable license
+            $license = $this->motisRepository->getLicense($rawDeparture['source'], $source);
+            if (empty($license) || !$license->active) {
+                [$country, $name] = $this->motisRepository->getCountryAndLicense($rawDeparture['source']);
+                $licenseIdentifier = $name;
+                $licenseName       = sprintf('%s: %s', strtoupper($country), $name);
+
+                $license                            = $license ? $this->licenseService->getLicenseDataForSource($license) : null;
+                $removedEntries[$licenseIdentifier] = $license ?? $licenseName;
+                $removedCount++;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function mapDepartures(mixed $entries, Station $station, DataProvider $source): FilteredDepartures {
+        $departures     = collect();
+        $removedEntries = [];
+        $removedCount   = 0;
+
         foreach ($entries as $rawDeparture) {
-            if (config('trwl.motis.filter_licenses')) {
-                // Check if the source is licensed under an acceptable license
-                $license = $this->motisRepository->getLicense($rawDeparture['source'], $source);
-                if (empty($license)) {
-                    continue;
-                }
+            if ($this->checkLicenseData($rawDeparture, $source, $removedEntries, $removedCount)) {
+                continue; // skip this entry if it does not have a valid license
             }
 
             //trip
             $tripId              = $rawDeparture['tripId'];
+            $tripShortName       = $rawDeparture['tripShortName'] ?? '';
             $rawDepartureStation = $rawDeparture['place'];
-            $tripLineName        = $rawDeparture['routeShortName'] ?? '';
-            $category            = MotisCategory::tryFrom($rawDeparture['mode']);
-            $hafasTravelType     = $category->getHTT()->value;
+            $tripLineName        = $rawDeparture['displayName'] ?? '';
+            $hafasTravelType     = $this->getCategoryFromLeg($rawDeparture);
 
             $platformPlanned = $rawDepartureStation['scheduledTrack'] ?? '';
             $platformReal    = $rawDepartureStation['track'] ?? $platformPlanned;
@@ -194,9 +309,9 @@ class MotisHydrator
                 $departureStation = $this->stationRepository->getStationsByIdentifiers([$rawDepartureStation['stopId']], $source)->first();
                 if ($departureStation === null) {
                     $stationId        = $rawDepartureStation['stopId'];
-                    $departureStation = $this->stationRepository->updateOrCreateByIfopt($stationId, $source, $this);
+                    $departureStation = $this->stationRepository->updateOrCreateByIfopt($stationId, $source, $rawDepartureStation['lat'], $rawDepartureStation['lon']);
                     // if station does not exist, request it from API
-                    $departureStation = $departureStation ?? $this->stationRepository->createMotisStation($rawDepartureStation, $source);
+                    $departureStation = $departureStation ?? $this->stationRepository->createMotisStationIdentifier($rawDepartureStation, $source);
                 }
             } catch (Exception $exception) {
                 Log::error($exception->getMessage());
@@ -211,10 +326,11 @@ class MotisHydrator
                                       tripId:        $tripId,
                                       direction:     $rawDeparture['headsign'],
                                       lineName:      $tripLineName,
-                                      number:        $tripId,
+                                      number:        $tripShortName,
                                       category:      $hafasTravelType,
-                                      journeyNumber: $tripId,
-                                      operator:      $this->parseOperator($rawDeparture),
+                                      journeyNumber: $tripShortName,
+                                      operator:      $this->parseOperator($rawDeparture, $source),
+                                      routeColor:    $rawDeparture['routeColor'] ?? null,
                                   ),
                 plannedPlatform:  $platformPlanned,
                 realPlatform:     $platformReal,
@@ -223,7 +339,7 @@ class MotisHydrator
             $departures->push($departure);
         }
 
-        return DepartureHydrator::map($departures);
+        return new FilteredDepartures(DepartureHydrator::map($departures), collect(array_values($removedEntries)), $removedCount);
     }
 
 }

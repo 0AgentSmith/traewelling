@@ -18,7 +18,6 @@ use App\Models\Status;
 use App\Models\Stopover;
 use App\Models\Trip;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -71,13 +70,6 @@ class StatusController extends Controller
      */
     public static function getDashboard(): AnonymousResourceCollection {
         return StatusResource::collection(DashboardController::getPrivateDashboard(Auth::user()));
-    }
-
-    /**
-     * @deprecated
-     */
-    public static function getGlobalDashboard(): AnonymousResourceCollection {
-        return StatusResource::collection(DashboardController::getGlobalDashboard(Auth::user()));
     }
 
     /**
@@ -285,14 +277,14 @@ class StatusController extends Controller
      *
      * @param int $id
      *
-     * @return StatusResource
+     * @return StatusResource|JsonResponse
      */
-    public function show(int $id): StatusResource {
+    public function show(int $id): StatusResource|JsonResponse {
         $status = StatusBackend::getStatus($id);
         try {
             $this->authorize('view', $status);
         } catch (AuthorizationException) {
-            abort(403, 'Status invisible to you.');
+            return response()->json(['message' => 'Status invisible to you.'], 403);
         }
         return new StatusResource($status);
     }
@@ -311,21 +303,14 @@ class StatusController extends Controller
      *          example=1337,
      *          @OA\Schema(type="integer")
      *      ),
-     *      @OA\Response(
-     *          response=200,
-     *          description="successful operation",
-     *          @OA\JsonContent(
-     *                      ref="#/components/schemas/SuccessResponse"
-     *          )
-     *       ),
-     *       @OA\Response(response=400, description="Bad request"),
-     *       @OA\Response(response=404, description="No status found for this id"),
-     *       @OA\Response(response=403, description="User not authorized to manipulate this status"),
-     *       security={
-     *           {"passport": {"write-statuses"}}, {"token": {}}
-     *
-     *       }
-     *     )
+     *      @OA\Response(response=204, description="Status deleted."),
+     *      @OA\Response(response=400, description="Bad request"),
+     *      @OA\Response(response=404, description="No status found for this id"),
+     *      @OA\Response(response=403, description="User not authorized to manipulate this status"),
+     *      security={
+     *          {"passport": {"write-statuses"}}, {"token": {}}
+     *      }
+     * )
      *
      * @param int $statusId
      *
@@ -334,12 +319,7 @@ class StatusController extends Controller
     public function destroy(int $statusId): JsonResponse {
         try {
             StatusBackend::DeleteStatus(Auth::user(), $statusId);
-            // ToDo: Remove message once the frontend doesn't use the message for anything
-            return $this->sendResponse(
-                ['message' => __('controller.status.delete-ok')],
-                200,
-                ['status' => 'success']
-            );
+            return response()->json(null, 204);
         } catch (AuthorizationException) {
             return $this->sendError('You are not allowed to delete this status.', 403);
         } catch (ModelNotFoundException) {
@@ -394,8 +374,8 @@ class StatusController extends Controller
         $validator = Validator::make($request->all(), [
             //Just changing of metadata
             'body'                      => ['nullable', 'max:280', 'nullable'],
-            'business'                  => ['required', new Enum(Business::class)],
-            'visibility'                => ['required', new Enum(StatusVisibility::class)],
+            'business'                  => [new Enum(Business::class)],
+            'visibility'                => [new Enum(StatusVisibility::class)],
             'eventId'                   => ['nullable', 'integer', 'exists:events,id'],
 
             //Changing of Checkin-Metadata
@@ -422,8 +402,13 @@ class StatusController extends Controller
             }
 
             DB::beginTransaction();
-            if (isset($validated['destinationId'], $validated['destinationArrivalPlanned'])
-                && ((int) $validated['destinationId']) !== $status->checkin->destinationStopover->station->id) {
+            if (
+                isset($validated['destinationId'], $validated['destinationArrivalPlanned'])
+                && (
+                    ((int) $validated['destinationId']) !== $status->checkin->destinationStopover->station->id
+                    || (Carbon::parse($validated['destinationArrivalPlanned'])->ne($status->checkin->destinationStopover->arrival_planned))
+                )
+            ) {
                 $arrival  = Carbon::parse($validated['destinationArrivalPlanned'])->timezone(config('app.timezone'));
                 $stopover = Stopover::where('train_station_id', $validated['destinationId'])
                                     ->where('arrival_planned', $arrival)
@@ -438,16 +423,17 @@ class StatusController extends Controller
                     newDestinationStopover: $stopover,
                 );
             }
+            $updatePayload = [];
+            if (array_key_exists('body', $validated)) {
+                $updatePayload['body'] = $validated['body'] ?? null;
+            }
+            if (array_key_exists('business', $validated)) {
+                $updatePayload['business'] = Business::from($validated['business']);
+            }
 
-            $updatePayload = [
-                'body'       => $validated['body'] ?? null,
-                'business'   => Business::from($validated['business']),
-                'visibility' => StatusVisibility::from($validated['visibility']),
-            ];
-
-            if ($status->lock_visibility) {
+            if (!$status->lock_visibility && array_key_exists('visibility', $validated)) {
                 // If moderation has locked the visibility, prevent the user from changing it
-                unset($updatePayload['visibility']);
+                $updatePayload['visibility'] = StatusVisibility::from($validated['visibility']);
             }
 
             if (array_key_exists('eventId', $validated)) { // don't use isset here as it would return false if eventId is null
@@ -457,13 +443,13 @@ class StatusController extends Controller
 
             if (array_key_exists('manualDeparture', $validated)) {
                 $manualDeparture = isset($validated['manualDeparture'])
-                    ? Carbon::parse($validated['manualDeparture'], auth()->user()->timezone)
+                    ? Carbon::parse($validated['manualDeparture'], auth()->user()->timezone)->setSecond(0)->setMillisecond(0)
                     : null;
                 $status->checkin->update(['manual_departure' => $manualDeparture]);
             }
             if (array_key_exists('manualArrival', $validated)) {
                 $manualArrival = isset($validated['manualArrival'])
-                    ? Carbon::parse($validated['manualArrival'], auth()->user()->timezone)
+                    ? Carbon::parse($validated['manualArrival'], auth()->user()->timezone)->setSecond(0)->setMillisecond(0)
                     : null;
                 $status->checkin->update(['manual_arrival' => $manualArrival]);
             }
@@ -643,7 +629,7 @@ class StatusController extends Controller
      *     )
      */
     public function getActiveStatus(): StatusResource|JsonResponse {
-        $latestStatuses = UserBackend::statusesForUser(user: Auth::user());
+        $latestStatuses = UserBackend::statusesForUser(Auth::user());
         if ($latestStatuses->count() > 0) {
             foreach ($latestStatuses as $status) {
                 if ($status->checkin->originStopover->departure->isPast()

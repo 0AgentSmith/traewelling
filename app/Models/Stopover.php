@@ -7,30 +7,9 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
- * properties
- * @property int         $id
- * @property string      $trip_id
- * @property int         $train_station_id
- * @property UTCDateTime $arrival_planned
- * @property UTCDateTime $arrival_real
- * @property UTCDateTime $arrival
- * @property string      $arrival_platform_planned
- * @property string      $arrival_platform_real
- * @property UTCDateTime $departure_planned
- * @property UTCDateTime $departure_real
- * @property UTCDateTime $departure
- * @property string      $departure_platform_planned
- * @property string      $departure_platform_real
- * @property bool        $isArrivalDelayed
- * @property bool        $isDepartureDelayed
- * @property bool        $cancelled
- *
- * relations
- * @property Trip        $trip
- * @property Station     $station
- *
  * @todo rename table to "Stopover" (without Train - we have more than just trains)
  * @todo rename "train_station_id" to "station_id" - we have more than just trains.
  * @todo rename "cancelled" to "is_cancelled" - or split into "is_arrival_cancelled" and "is_departure_cancelled"? need
@@ -47,7 +26,7 @@ class Stopover extends Model
         'arrival_platform_planned', 'arrival_platform_real',
         'departure_planned', 'departure_real',
         'departure_platform_planned', 'departure_platform_real',
-        'cancelled'
+        'cancelled', 'station_identifier_id', 'route_segment_id',
     ];
     protected $appends  = [
         'arrival', 'departure', 'platform', 'isArrivalDelayed', 'isDepartureDelayed',
@@ -77,12 +56,20 @@ class Stopover extends Model
         return $this->belongsTo(Station::class, 'train_station_id', 'id');
     }
 
+    public function routeSegment(): HasOne {
+        return $this->hasOne(RouteSegment::class, 'id', 'route_segment_id');
+    }
+
     /**
      * @return BelongsTo
      * @deprecated use station() instead
      */
     public function trainStation(): BelongsTo {
         return $this->station();
+    }
+
+    public function stationIdentifier(): HasOne {
+        return $this->hasOne(StationIdentifier::class, 'id', 'station_identifier_id');
     }
 
     // These two methods are a ticking time bomb and I hope we'll never see it explode. 💣

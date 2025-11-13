@@ -13,8 +13,6 @@
     "admin.select-range": "Bereisch auswähle",
     "admin.checkins": "Scheck-ins",
     "admin.registered-users": "Registrierte Nutzer",
-    "admin.hafas-entries-by-type": "HAFAS-Einträge noach Transport-Typ",
-    "admin.hafas-entries-by-polylines": "HAFAS-Einträge unn Anzahl dazugehörischer Polylines",
     "admin.new-users": "naie Nutzer",
     "admin.statuses": "Status",
     "auth.failed": "Dess Konto existiert nedd orrer die Date wurdn falsch oigegewwe.",
@@ -43,7 +41,7 @@
     "controller.transport.overlapping-checkin": "Du hoaschd schunn en Scheck-In in Verbindung :linename.",
     "controller.transport.also-in-connection": "Aa in der Verbindung is:|Aa in der Verbindung sinn:",
     "controller.transport.social-post": "Isch bin groad in :lineName noach :Destination! #NowTräwelling |Isch bin groad in Linie :lineName noach :Destination! #NowTräwelling ",
-    "controller.transport.social-post-with-event": "Isch bin groad in :lineName noach :destination für #:hashtag! #NowTräwelling | Isch bin groad in Linie :lineName noach #destination für #:hashtag! #NowTräwelling ",
+    "controller.transport.social-post-with-event": "Isch bin groad in :lineName noach :destination für #:hashtag! #NowTräwelling | Isch bin groad in Linie :lineName noach :destination für #:hashtag! #NowTräwelling ",
     "controller.transport.social-post-for": "für #:hashtag",
     "controller.transport.no-station-found": "Für diese Such wurd koa Hoaldestell gfunne.",
     "controller.user.follow-404": "Dieser Follow existierte gar nedd.",
@@ -414,5 +412,13 @@
     "welcome": "Willkumme bei Träwelling!",
     "email.verification.required": "Um Träwelling in vollem Umfang nutze zu kenne, muschde noch dei E-Mail Adresse bestätige.",
     "email.verification.sent": "Um die Änderung doiner E-Mail Adresse abzuschließe muschde noch uff de Link inde E-Mail klicke, welsche mer dir groad gschickt hawwe.",
-    "about.events": "Was steht aa?"
+    "about.events": "Was steht aa?",
+    "license.info": "Lizenz",
+    "license.provided": "Die Date wurdn vunn :provider bereitgschdellt unn stehn unner de :license vunn :source.",
+    "user.login.mastodon": "Mit Mastodon oamelde",
+    "user.login.or": "Orrer",
+    "user.no-account": "Hoaschd noch koan Konto?",
+    "user.likes-enabled": "Likes oanzeische",
+    "user.points-enabled": "Punkte unn Ranglischd oanzeische",
+    "error.status.not-authorized": "Du darfschd dess Status nedd seje."
 }

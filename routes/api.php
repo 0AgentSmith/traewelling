@@ -59,7 +59,6 @@ Route::group(['prefix' => 'v1', 'middleware' => ['return-json']], static functio
              ->middleware(['scope:read-statistics']);
         Route::group(['middleware' => ['scope:read-statuses']], static function() {
             Route::get('dashboard', [StatusController::class, 'getDashboard']);
-            Route::get('dashboard/global', [StatusController::class, 'getGlobalDashboard']);
             Route::get('dashboard/future', [StatusController::class, 'getFutureCheckins']);
         });
         Route::group(['middleware' => ['scope:write-statuses']], static function() {
@@ -120,7 +119,8 @@ Route::group(['prefix' => 'v1', 'middleware' => ['return-json']], static functio
                 Route::post('/{userId}/mute', [UserController::class, 'createMute']);
                 Route::delete('/{userId}/mute', [UserController::class, 'destroyMute']);
             });
-            Route::get('search/{query?}', [UserController::class, 'search'])->middleware(['scope:read-search']);
+            Route::get('search/{query}', [UserController::class, 'search'])->middleware(['scope:read-search']);
+            Route::get('search', [UserController::class, 'searchByParameters'])->middleware(['scope:read-search']);
             Route::get('statuses/active', [StatusController::class, 'getActiveStatus'])
                  ->middleware(['scope:read-statuses']);
         });

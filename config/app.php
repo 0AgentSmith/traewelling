@@ -87,17 +87,22 @@ return [
 
     'locale'  => 'de',
     'locales' => [
+        'cs'     => 'Čeština',
         'de'     => 'Deutsch',
         'de_he'  => 'Deutsch (Südhessisch)',
         'de_pfl' => 'Deutsch (Pfälzisch)',
         'de_by'  => 'Deutsch (Bayerisch)',
         'en'     => 'English',
         'es'     => 'Spanish',
+        'is'     => 'Íslenska',
         'it'     => 'Italiano',
         'fr'     => 'Français',
+        'nb_NO'  => 'Norwegian Bokmål',
         'nl'     => 'Nederlands',
         'sv'     => 'Svenska',
         'pl'     => 'Polski',
+        'pt'     => 'Português',
+        'tr'     => 'Türkçe',
     ],
 
     /*

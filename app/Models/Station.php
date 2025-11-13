@@ -2,46 +2,16 @@
 
 namespace App\Models;
 
-use Carbon\Carbon;
+use App\Dto\Coordinate;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Collection;
+use phpGPX\Models\Point;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
 
 /**
- * // properties
- * @property int                 $id
- * @property int|null            $ibnr
- * @property string              $rilIdentifier
- * @property string|null         $wikidata_id
- * @property string|null         $ifopt_a
- * @property int|null            $ifopt_b
- * @property int|null            $ifopt_c
- * @property int|null            $ifopt_d
- * @property int|null            $ifopt_e
- * @property string              $name
- * @property double              $latitude
- * @property double              $longitude
- * @property string              $source
- * @property int                 $relevance
- * @property int                 $time_offset
- * @property bool                $shift_time
- * @property Carbon              $created_at
- * @property Carbon              $updated_at
- *
- * // relations
- * @property Collection          $names
- * @property StationIdentifier[] $stationIdentifiers
- * @property Collection|Area[]   $areas
- *
- * // appends
- * @property string|null         $ifopt
- * @property string|null         $localized_name
- *
- *
  * @todo rename table to "Station" (without Train - we have more than just trains)
  */
 class Station extends Model
@@ -70,10 +40,18 @@ class Station extends Model
         'latitude'      => 'float',
         'longitude'     => 'float',
     ];
-    protected $appends  = ['ifopt', 'localized_name'];
+    protected $appends  = ['ifopt', 'localized_name', 'location'];
 
     public function names(): HasMany {
         return $this->hasMany(StationName::class, 'station_id', 'id');
+    }
+
+    public function getLocationAttribute(): Point {
+        $point = new Point(Point::TRACKPOINT);
+        $point->latitude = $this->latitude;
+        $point->longitude = $this->longitude;
+
+        return $point;
     }
 
     public function getIfoptAttribute(): ?string {

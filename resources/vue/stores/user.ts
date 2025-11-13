@@ -11,6 +11,9 @@ export const useUserStore = defineStore("user", {
         refreshed: "2021-08-01T12:00:00Z"
     }),
     getters: {
+        getId(): number | null {
+            return this.user?.id ?? null;
+        },
         getDisplayName(): string {
             return this.user?.displayName ?? "";
         },
@@ -49,6 +52,9 @@ export const useUserStore = defineStore("user", {
         },
         hasBeta(): boolean {
             return this.user?.roles?.includes("open-beta") ?? false;
+        },
+        isAdmin(): boolean {
+            return this.user?.roles?.includes("admin") ?? false;
         }
     },
     actions: {
@@ -76,12 +82,12 @@ export const useUserStore = defineStore("user", {
                     return error;
                 })
         },
-        async fetchSettings(): Promise<void> {
+        async fetchSettings(force: boolean = false): Promise<void> {
             // Fetch Data every 15 Minutes
             // ToDo: reduce interval
             // ToDo: refresh with settings update
             // ToDo: invalidate when logging out
-            if (this.refreshed && (new Date().getTime() - new Date(this.refreshed).getTime()) < 60 * 15 * 1000) {
+            if (!force && this.refreshed && (new Date().getTime() - new Date(this.refreshed).getTime()) < 60 * 15 * 1000) {
                 return;
             }
             this.loading = true;

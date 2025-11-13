@@ -11,8 +11,6 @@
     "admin.select-range": "Bereich auswähla",
     "admin.checkins": "Check-ins",
     "admin.registered-users": "Registrierte Nutzer",
-    "admin.hafas-entries-by-type": "HAFAS-Oiträg nach Transprt-Typ",
-    "admin.hafas-entries-by-polylines": "HAFAS-Oiträg und Anzahl dazugherigr Polylines",
     "admin.new-users": "nuie Nutzer",
     "admin.statuses": "Status",
     "auth.failed": "Des Konto existiert id oder die Data wurded foisch oigeaba.",
@@ -361,7 +359,7 @@
     "leaderboard.notice": "Dia hier a'zoigta Data basiarat uff de Check-Ins vo de ledschde 7 Täg. Aktualisierunga kennat bis zu fünf Minuta daura.",
     "minutes": "Minuta",
     "status.ogp-title": ":name's Reisn mit Träwelling",
-    "controller.transport.social-post-with-event": "I be grad in :lineName noch :destination fiar #:hashtag! #NowTräwelling | I be grad in d Linie :lineName noch #destination fiar #:hashtag! #NowTräwelling ",
+    "controller.transport.social-post-with-event": "I be grad in :lineName noch :destination fiar #:hashtag! #NowTräwelling | I be grad in d Linie :lineName noch :destination fiar #:hashtag! #NowTräwelling ",
     "user.email-verify": "E-Mail-Adressn bschdädiga",
     "modals.setHome-body": "Mechtsch de <em>:stationName</em> als dein Hoimatbahhof feschtleaga?",
     "user.forgot-password": "Hosch dei Passwort vergessa?",
@@ -539,5 +537,7 @@
     "export.arrival": "Ahnkunft",
     "notifications.eventSuggestionProcessed.duplicate": "Dein Vorschlag hots scho ge..",
     "notifications.readAll.success": "Alle Benachrichtigunga sind als gleasa markiert wora.",
-    "export.reason.business": "Gschäftsreisn"
+    "export.reason.business": "Gschäftsreisn",
+    "license.info": "Lizenz",
+    "license.provided": "Die Datn sind bereidgestelld von :provider und sin lizensierd von : source mid der :license."
 }
